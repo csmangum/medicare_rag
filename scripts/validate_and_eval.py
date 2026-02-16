@@ -925,7 +925,7 @@ def main() -> int:
                     args.filter_difficulty,
                 )
                 return 1
-            # Write filtered questions to a temp file
+            # Write filtered questions to a temp file (cleaned up in finally below)
             import tempfile
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".json", delete=False, encoding="utf-8"
@@ -933,14 +933,15 @@ def main() -> int:
                 json.dump(filtered, tmp, indent=2)
                 temp_eval_path = Path(tmp.name)
                 eval_path = temp_eval_path
-            logger.info(
-                "Filtered to %d questions (category=%s, difficulty=%s)",
-                len(filtered),
-                args.filter_category,
-                args.filter_difficulty,
-            )
 
         try:
+            if temp_eval_path is not None:
+                logger.info(
+                    "Filtered to %d questions (category=%s, difficulty=%s)",
+                    len(filtered),
+                    args.filter_category,
+                    args.filter_difficulty,
+                )
             metrics = run_eval(
                 eval_path,
                 k=args.k,

@@ -366,10 +366,8 @@ class TestRunEval:
             },
         ])
         mock_retriever = MagicMock()
+        # One invoke per question; results are cached and reused for multi-k sweep.
         mock_retriever.invoke.side_effect = [
-            [self._make_doc("Part B outpatient", "iom")],
-            [self._make_doc("Unrelated", "codes")],
-            # For multi-k sweep (re-invocations), the retriever returns same
             [self._make_doc("Part B outpatient", "iom")],
             [self._make_doc("Unrelated", "codes")],
         ]
@@ -401,9 +399,8 @@ class TestRunEval:
             },
         ])
         mock_retriever = MagicMock()
+        # One invoke per question; results are cached for multi-k sweep.
         mock_retriever.invoke.side_effect = [
-            [self._make_doc("Part B text", "iom")],
-            [self._make_doc("HCPCS code A1234", "codes", "code_1")],
             [self._make_doc("Part B text", "iom")],
             [self._make_doc("HCPCS code A1234", "codes", "code_1")],
         ]
@@ -435,9 +432,8 @@ class TestRunEval:
             },
         ])
         mock_retriever = MagicMock()
+        # One invoke per question; results are cached for multi-k sweep.
         mock_retriever.invoke.side_effect = [
-            [self._make_doc("Part B coverage", "iom")],
-            [self._make_doc("Unrelated", "codes")],
             [self._make_doc("Part B coverage", "iom")],
             [self._make_doc("Unrelated", "codes")],
         ]
