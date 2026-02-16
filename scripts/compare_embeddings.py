@@ -142,6 +142,7 @@ def evaluate_model(
     model_name: str,
     queries: list[dict],
     passages: list[tuple[str, list[str]]],
+    top_k: int = 3,
 ) -> dict:
     """Evaluate a single embedding model. Returns metrics dict."""
     from langchain_huggingface import HuggingFaceEmbeddings
@@ -167,9 +168,6 @@ def evaluate_model(
     logger.info("  Embedded %d queries + %d passages in %.1fs",
                 len(query_texts), len(passage_texts), embed_time)
 
-    # Build query_id -> query_index mapping
-    qid_to_idx = {q["id"]: i for i, q in enumerate(queries)}
-
     # For each query, compute similarity to all passages and rank them
     hits = 0
     reciprocal_ranks = []
@@ -188,7 +186,7 @@ def evaluate_model(
 
         first_hit_rank = None
         if relevant_passage_indices:
-            for rank, pi in enumerate(ranked_indices, start=1):
+            for rank, pi in enumerate(ranked_indices[:top_k], start=1):
                 if pi in relevant_passage_indices:
                     first_hit_rank = rank
                     break
