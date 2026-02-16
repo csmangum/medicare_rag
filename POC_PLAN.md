@@ -243,7 +243,7 @@ Run each through the query chain, manually assess answer quality and citation ac
 
 - Hybrid search (BM25 + vector) for better recall on code lookups.
 - Scheduled re-ingestion pipeline for quarterly CMS updates.
-- Fine-tuned embedding model on Medicare terminology.
+- Fine-tuned embedding model on Medicare terminology (see `docs/EMBEDDING_MODELS_RESEARCH.md` for research and `scripts/compare_embeddings.py` to benchmark candidates).
 - Production deployment (API server, auth, logging, HIPAA controls).
 
 ---

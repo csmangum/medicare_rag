@@ -21,8 +21,16 @@ PROCESSED_DIR = DATA_DIR / "processed"
 # Phase 3: local embeddings and vector store
 CHROMA_DIR = DATA_DIR / "chroma"
 COLLECTION_NAME = "medicare_rag"
+
+# Embedding model: NeuML/pubmedbert-base-embeddings is a biomedical sentence-
+# transformer (Apache-2.0) pre-trained on PubMed + clinical text.  It produces
+# 768-dim embeddings and significantly outperforms the generic all-MiniLM-L6-v2
+# on medical/clinical retrieval tasks.  See docs/EMBEDDING_MODELS_RESEARCH.md
+# for alternatives and a comparison guide.
+#
+# NOTE: changing this after indexing requires a full re-index (ingest --force).
 EMBEDDING_MODEL = os.environ.get(
-    "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+    "EMBEDDING_MODEL", "NeuML/pubmedbert-base-embeddings"
 )
 
 # Phase 4: local LLM (Hugging Face pipeline, runs with sentence-transformers stack)
