@@ -74,3 +74,18 @@ python scripts/validate_and_eval.py --eval-only --json   # metrics as JSON
 ```
 
 Validation checks that the Chroma collection exists, has documents, sample metadata (`doc_id`, `content_hash`), and that similarity search runs. Evaluation uses `scripts/eval_questions.json` (Medicare-focused queries with expected keywords/sources) and reports **hit rate** (fraction of queries with a relevant doc in top-k) and **MRR** (mean reciprocal rank). Add or edit entries in `eval_questions.json` to extend the eval set.
+
+## Phase 4: Query (RAG with local LLM)
+
+Run the interactive query REPL (after ingestion):
+
+```bash
+python scripts/query.py [--filter-source iom|mcd|codes] [--filter-manual 100-02] [--filter-jurisdiction JL] [-k 8]
+```
+
+Generation uses a local Hugging Face model (no API key). Configure via env (see `.env.example`):
+
+- **`LOCAL_LLM_MODEL`** — Model id (default: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`).
+- **`LOCAL_LLM_DEVICE`** — `auto` (default), `cpu`, or device map; use `cpu` on headless or when no GPU.
+- **`CUDA_VISIBLE_DEVICES`** — Override GPU visibility (e.g. `CUDA_VISIBLE_DEVICES=""` for CPU-only).
+- Optional: **`LOCAL_LLM_MAX_NEW_TOKENS`**, **`LOCAL_LLM_REPETITION_PENALTY`**.

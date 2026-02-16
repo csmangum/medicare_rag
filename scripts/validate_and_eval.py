@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Validate the Chroma index and run retrieval evaluation.
 
+Validates: index exists, has documents, required metadata, and similarity_search works.
+Eval: runs each question in eval_questions.json through the same retriever used by the
+RAG chain (get_retriever), checks for expected keywords/sources in top-k, reports hit
+rate and MRR.
+
 Usage:
   python scripts/validate_and_eval.py              # validate + eval
   python scripts/validate_and_eval.py --validate-only
   python scripts/validate_and_eval.py --eval-only
   python scripts/validate_and_eval.py --eval-only -k 10
+  python scripts/validate_and_eval.py --eval-only --filter-source iom
+  python scripts/validate_and_eval.py --json       # machine-readable metrics
 """
 import argparse
 import json
@@ -30,6 +37,12 @@ def _load_store():
     embeddings = get_embeddings()
     store = get_or_create_chroma(embeddings)
     return store, embeddings
+
+
+def _load_retriever(k: int, metadata_filter: dict | None = None):
+    """Load the same retriever used by the RAG chain (for eval)."""
+    from medicare_rag.query.retriever import get_retriever
+    return get_retriever(k=k, metadata_filter=metadata_filter)
 
 
 def validate_index(store) -> bool:
@@ -92,21 +105,18 @@ def validate_index(store) -> bool:
 
 
 def _question_hit(
-    query: str,
-    store,
+    docs: list,
     expected_keywords: list[str] | None,
     expected_sources: list[str] | None,
-    k: int,
 ) -> tuple[bool, int | None, list[str]]:
-    """Run one query; return (hit, first_hit_rank_1based, list of source names in top-k)."""
-    results = store.similarity_search(query, k=k)
-    if not results:
+    """Given top-k docs for a query, return (hit, first_hit_rank_1based, list of source names)."""
+    if not docs:
         return False, None, []
 
-    sources_in_k = [r.metadata.get("source") for r in results if r.metadata.get("source")]
+    sources_in_k = [d.metadata.get("source") for d in docs if d.metadata.get("source")]
 
     first_hit_rank = None
-    for rank, doc in enumerate(results, start=1):
+    for rank, doc in enumerate(docs, start=1):
         text = (doc.page_content or "").lower()
         source = doc.metadata.get("source")
 
@@ -118,16 +128,19 @@ def _question_hit(
         )
 
         if keyword_ok and source_ok:
-            if first_hit_rank is None:
-                first_hit_rank = rank
+            first_hit_rank = rank
             break
 
     hit = first_hit_rank is not None
     return hit, first_hit_rank, sources_in_k
 
 
-def run_eval(store, eval_path: Path, k: int = 5) -> dict:
-    """Run eval set; return metrics dict."""
+def run_eval(
+    eval_path: Path,
+    k: int = 5,
+    metadata_filter: dict | None = None,
+) -> dict:
+    """Run eval set using the RAG retriever. Return metrics dict."""
     if not eval_path.exists():
         logger.error("Eval file not found: %s", eval_path)
         return {}
@@ -139,6 +152,8 @@ def run_eval(store, eval_path: Path, k: int = 5) -> dict:
         logger.warning("Eval file is empty")
         return {"n_questions": 0}
 
+    retriever = _load_retriever(k=k, metadata_filter=metadata_filter)
+
     results = []
     hits = 0
     reciprocal_ranks = []
@@ -149,8 +164,9 @@ def run_eval(store, eval_path: Path, k: int = 5) -> dict:
         expected_keywords = q.get("expected_keywords")
         expected_sources = q.get("expected_sources")
 
+        docs = retriever.invoke(query)
         hit, first_rank, sources_in_k = _question_hit(
-            query, store, expected_keywords, expected_sources, k
+            docs, expected_keywords, expected_sources
         )
         if hit:
             hits += 1
@@ -213,18 +229,29 @@ def main() -> int:
         action="store_true",
         help="Print eval metrics as JSON to stdout (for piping).",
     )
+    parser.add_argument(
+        "--filter-source",
+        type=str,
+        help="Restrict retrieval to this source (e.g. iom, mcd, codes).",
+    )
     args = parser.parse_args()
+
+    if args.json:
+        logging.getLogger().setLevel(logging.WARNING)
 
     do_validate = not args.eval_only
     do_eval = not args.validate_only
 
-    try:
-        store, _ = _load_store()
-    except Exception as e:
-        logger.exception("Failed to load store: %s", e)
-        return 1
+    metadata_filter = None
+    if args.filter_source:
+        metadata_filter = {"source": args.filter_source}
 
     if do_validate:
+        try:
+            store, _ = _load_store()
+        except Exception as e:
+            logger.exception("Failed to load store: %s", e)
+            return 1
         logger.info("=== Validation ===")
         if not validate_index(store):
             logger.error("Validation failed")
@@ -233,7 +260,9 @@ def main() -> int:
 
     if do_eval:
         logger.info("=== Evaluation (k=%d) ===", args.k)
-        metrics = run_eval(store, args.eval_file, k=args.k)
+        if metadata_filter:
+            logger.info("Filter: %s", metadata_filter)
+        metrics = run_eval(args.eval_file, k=args.k, metadata_filter=metadata_filter)
         if not metrics:
             return 1
 

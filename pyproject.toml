@@ -17,6 +17,8 @@ dependencies = [
     "langchain-core",
     "langchain-huggingface",
     "langchain-text-splitters",
+    "transformers",
+    "accelerate",
     "pdfplumber",
     "python-dotenv",
     "pytest",
