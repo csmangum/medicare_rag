@@ -1,12 +1,585 @@
 [
-  {"id": "coverage_part_b", "query": "What does Medicare Part B cover?", "expected_keywords": ["Part B", "outpatient", "medical", "coverage"], "expected_sources": ["iom", "mcd"]},
-  {"id": "hyperbaric_diabetic_wounds", "query": "Is hyperbaric oxygen therapy covered for diabetic wounds?", "expected_keywords": ["hyperbaric", "oxygen", "diabetic", "wound", "coverage"], "expected_sources": ["iom", "mcd"]},
-  {"id": "icd10_diabetes_foot_ulcer", "query": "What ICD-10 code maps to type 2 diabetes with foot ulcer?", "expected_keywords": ["ICD-10", "diabetes", "foot", "ulcer", "code"], "expected_sources": ["codes"]},
-  {"id": "bilateral_modifier", "query": "What modifier is required for bilateral procedures under Medicare Part B?", "expected_keywords": ["modifier", "bilateral", "Part B", "procedure"], "expected_sources": ["iom", "codes"]},
-  {"id": "novitas_cardiac_rehab", "query": "Does Novitas (JL) have an LCD for cardiac rehab?", "expected_keywords": ["Novitas", "JL", "LCD", "cardiac", "rehab"], "expected_sources": ["mcd"]},
-  {"id": "claims_processing", "query": "How are Medicare claims processed and submitted?", "expected_keywords": ["claim", "submit", "processing", "billing"], "expected_sources": ["iom"]},
-  {"id": "hcpcs_codes", "query": "HCPCS Level II codes for supplies and procedures", "expected_keywords": ["HCPCS", "code", "supply", "procedure"], "expected_sources": ["codes"]},
-  {"id": "modifiers", "query": "CPT modifiers for Medicare billing", "expected_keywords": ["modifier", "CPT", "billing", "Medicare"], "expected_sources": ["iom", "codes"]},
-  {"id": "appeals_power_wheelchair", "query": "What documentation is needed to appeal a Medicare denial for power wheelchair?", "expected_keywords": ["documentation", "appeal", "denial", "power wheelchair", "wheelchair"], "expected_sources": ["iom"]},
-  {"id": "rehab_coverage", "query": "Coverage for cardiac rehabilitation", "expected_keywords": ["cardiac", "rehab", "rehabilitation", "coverage"], "expected_sources": ["iom", "mcd"]}
+  {
+    "id": "iom_part_b_coverage",
+    "query": "What does Medicare Part B cover?",
+    "category": "policy_coverage",
+    "difficulty": "easy",
+    "expected_keywords": ["Part B", "outpatient", "medical", "coverage"],
+    "expected_sources": ["iom"],
+    "description": "Basic Part B coverage question - should match IOM 100-02 content"
+  },
+  {
+    "id": "iom_part_a_inpatient",
+    "query": "What inpatient hospital services does Medicare Part A cover?",
+    "category": "policy_coverage",
+    "difficulty": "easy",
+    "expected_keywords": ["Part A", "inpatient", "hospital"],
+    "expected_sources": ["iom"],
+    "description": "Basic Part A inpatient coverage from benefit policy manual"
+  },
+  {
+    "id": "iom_skilled_nursing",
+    "query": "What are the coverage requirements for skilled nursing facility services under Medicare?",
+    "category": "policy_coverage",
+    "difficulty": "medium",
+    "expected_keywords": ["skilled nursing", "facility", "coverage"],
+    "expected_sources": ["iom"],
+    "description": "SNF coverage criteria from IOM benefit policy manual"
+  },
+  {
+    "id": "iom_home_health",
+    "query": "What conditions must be met for Medicare home health coverage?",
+    "category": "policy_coverage",
+    "difficulty": "medium",
+    "expected_keywords": ["home health", "homebound", "coverage"],
+    "expected_sources": ["iom"],
+    "description": "Home health eligibility criteria from IOM"
+  },
+  {
+    "id": "iom_preventive_services",
+    "query": "What preventive services does Medicare cover?",
+    "category": "policy_coverage",
+    "difficulty": "easy",
+    "expected_keywords": ["preventive", "screening"],
+    "expected_sources": ["iom"],
+    "description": "Preventive and screening services coverage"
+  },
+  {
+    "id": "iom_medical_necessity",
+    "query": "How does Medicare define medical necessity for covered services?",
+    "category": "policy_coverage",
+    "difficulty": "medium",
+    "expected_keywords": ["medical necessity", "reasonable", "necessary"],
+    "expected_sources": ["iom"],
+    "description": "Medical necessity definition and criteria"
+  },
+
+  {
+    "id": "claims_processing_overview",
+    "query": "How are Medicare claims processed and submitted?",
+    "category": "claims_billing",
+    "difficulty": "easy",
+    "expected_keywords": ["claim", "submit", "processing"],
+    "expected_sources": ["iom"],
+    "description": "Claims submission process from IOM 100-04"
+  },
+  {
+    "id": "claims_electronic_submission",
+    "query": "What are the requirements for electronic Medicare claim submission?",
+    "category": "claims_billing",
+    "difficulty": "medium",
+    "expected_keywords": ["electronic", "claim", "submission"],
+    "expected_sources": ["iom"],
+    "description": "Electronic claim submission requirements"
+  },
+  {
+    "id": "claims_timely_filing",
+    "query": "What is the timely filing deadline for Medicare claims?",
+    "category": "claims_billing",
+    "difficulty": "medium",
+    "expected_keywords": ["timely", "filing", "deadline"],
+    "expected_sources": ["iom"],
+    "description": "Timely filing limits for Medicare claims"
+  },
+  {
+    "id": "billing_outpatient_hospital",
+    "query": "How should outpatient hospital services be billed to Medicare?",
+    "category": "claims_billing",
+    "difficulty": "medium",
+    "expected_keywords": ["outpatient", "hospital", "billing"],
+    "expected_sources": ["iom"],
+    "description": "Outpatient hospital billing rules from claims processing manual"
+  },
+  {
+    "id": "billing_physician_services",
+    "query": "What are the billing requirements for physician services under Medicare Part B?",
+    "category": "claims_billing",
+    "difficulty": "medium",
+    "expected_keywords": ["physician", "billing", "Part B"],
+    "expected_sources": ["iom"],
+    "description": "Physician billing guidelines"
+  },
+  {
+    "id": "secondary_payer",
+    "query": "When is Medicare the secondary payer?",
+    "category": "claims_billing",
+    "difficulty": "medium",
+    "expected_keywords": ["secondary", "payer", "primary"],
+    "expected_sources": ["iom"],
+    "description": "Medicare Secondary Payer rules"
+  },
+
+  {
+    "id": "modifier_bilateral",
+    "query": "What modifier is required for bilateral procedures under Medicare Part B?",
+    "category": "coding_modifiers",
+    "difficulty": "medium",
+    "expected_keywords": ["modifier", "bilateral"],
+    "expected_sources": ["iom", "codes"],
+    "description": "Bilateral procedure modifier rules"
+  },
+  {
+    "id": "modifier_cpt_general",
+    "query": "CPT modifiers for Medicare billing",
+    "category": "coding_modifiers",
+    "difficulty": "easy",
+    "expected_keywords": ["modifier", "CPT"],
+    "expected_sources": ["iom", "codes"],
+    "description": "General CPT modifier information"
+  },
+  {
+    "id": "modifier_59",
+    "query": "When should modifier 59 be used for distinct procedural services?",
+    "category": "coding_modifiers",
+    "difficulty": "medium",
+    "expected_keywords": ["modifier", "59", "distinct"],
+    "expected_sources": ["iom", "codes"],
+    "description": "Modifier 59 usage for distinct procedures"
+  },
+  {
+    "id": "modifier_25",
+    "query": "What is modifier 25 and when is it appropriate to use for evaluation and management services?",
+    "category": "coding_modifiers",
+    "difficulty": "medium",
+    "expected_keywords": ["modifier", "25", "evaluation", "management"],
+    "expected_sources": ["iom", "codes"],
+    "description": "Modifier 25 for significant E/M services"
+  },
+  {
+    "id": "modifier_26_tc",
+    "query": "What is the difference between modifier 26 and modifier TC for professional and technical components?",
+    "category": "coding_modifiers",
+    "difficulty": "medium",
+    "expected_keywords": ["modifier", "26", "professional", "technical"],
+    "expected_sources": ["iom", "codes"],
+    "description": "Professional vs technical component modifiers"
+  },
+
+  {
+    "id": "hcpcs_codes_general",
+    "query": "HCPCS Level II codes for supplies and procedures",
+    "category": "code_lookup",
+    "difficulty": "easy",
+    "expected_keywords": ["HCPCS", "code"],
+    "expected_sources": ["codes"],
+    "description": "General HCPCS code lookup"
+  },
+  {
+    "id": "hcpcs_dme",
+    "query": "What HCPCS codes are used for durable medical equipment?",
+    "category": "code_lookup",
+    "difficulty": "medium",
+    "expected_keywords": ["HCPCS", "durable medical equipment"],
+    "expected_sources": ["codes"],
+    "description": "DME-related HCPCS codes"
+  },
+  {
+    "id": "hcpcs_drug_codes",
+    "query": "HCPCS J codes for injectable drugs administered in physician office",
+    "category": "code_lookup",
+    "difficulty": "medium",
+    "expected_keywords": ["code", "drug", "inject"],
+    "expected_sources": ["codes"],
+    "description": "J-code drug codes in HCPCS"
+  },
+  {
+    "id": "icd10_diabetes_foot_ulcer",
+    "query": "What ICD-10 code maps to type 2 diabetes with foot ulcer?",
+    "category": "code_lookup",
+    "difficulty": "medium",
+    "expected_keywords": ["diabetes", "foot", "ulcer"],
+    "expected_sources": ["codes"],
+    "description": "ICD-10-CM code for diabetic foot ulcer"
+  },
+  {
+    "id": "icd10_hypertension",
+    "query": "What is the ICD-10-CM code for essential hypertension?",
+    "category": "code_lookup",
+    "difficulty": "easy",
+    "expected_keywords": ["hypertension"],
+    "expected_sources": ["codes"],
+    "description": "ICD-10-CM hypertension code"
+  },
+  {
+    "id": "icd10_chest_pain",
+    "query": "ICD-10 diagnosis code for chest pain unspecified",
+    "category": "code_lookup",
+    "difficulty": "easy",
+    "expected_keywords": ["chest pain"],
+    "expected_sources": ["codes"],
+    "description": "ICD-10-CM chest pain code"
+  },
+  {
+    "id": "icd10_copd",
+    "query": "ICD-10-CM codes for chronic obstructive pulmonary disease COPD",
+    "category": "code_lookup",
+    "difficulty": "medium",
+    "expected_keywords": ["obstructive", "pulmonary"],
+    "expected_sources": ["codes"],
+    "description": "COPD diagnosis codes"
+  },
+
+  {
+    "id": "lcd_cardiac_rehab",
+    "query": "Does Novitas (JL) have an LCD for cardiac rehab?",
+    "category": "lcd_policy",
+    "difficulty": "hard",
+    "expected_keywords": ["cardiac", "rehab"],
+    "expected_sources": ["mcd"],
+    "description": "LCD lookup for specific contractor and service"
+  },
+  {
+    "id": "lcd_hyperbaric_oxygen",
+    "query": "Is hyperbaric oxygen therapy covered for diabetic wounds?",
+    "category": "lcd_policy",
+    "difficulty": "hard",
+    "expected_keywords": ["hyperbaric", "oxygen"],
+    "expected_sources": ["iom", "mcd"],
+    "description": "Coverage determination for hyperbaric oxygen therapy"
+  },
+  {
+    "id": "ncd_coverage_criteria",
+    "query": "What are the national coverage determination criteria for Medicare services?",
+    "category": "lcd_policy",
+    "difficulty": "medium",
+    "expected_keywords": ["coverage", "determination"],
+    "expected_sources": ["iom", "mcd"],
+    "description": "NCD criteria overview"
+  },
+  {
+    "id": "lcd_physical_therapy",
+    "query": "What LCDs apply to outpatient physical therapy services?",
+    "category": "lcd_policy",
+    "difficulty": "hard",
+    "expected_keywords": ["physical therapy", "therapy"],
+    "expected_sources": ["mcd"],
+    "description": "LCD for physical therapy services"
+  },
+  {
+    "id": "lcd_imaging_advanced",
+    "query": "LCD coverage for advanced imaging MRI and CT scans",
+    "category": "lcd_policy",
+    "difficulty": "hard",
+    "expected_keywords": ["imaging"],
+    "expected_sources": ["mcd"],
+    "description": "Advanced imaging LCD policies"
+  },
+  {
+    "id": "mcd_wound_care",
+    "query": "Medicare coverage for wound care and wound vac therapy",
+    "category": "lcd_policy",
+    "difficulty": "hard",
+    "expected_keywords": ["wound"],
+    "expected_sources": ["mcd"],
+    "description": "Wound care coverage from MCD"
+  },
+
+  {
+    "id": "appeals_general",
+    "query": "What is the Medicare appeals process for denied claims?",
+    "category": "appeals_denials",
+    "difficulty": "medium",
+    "expected_keywords": ["appeal", "denied"],
+    "expected_sources": ["iom"],
+    "description": "General Medicare appeals process"
+  },
+  {
+    "id": "appeals_power_wheelchair",
+    "query": "What documentation is needed to appeal a Medicare denial for power wheelchair?",
+    "category": "appeals_denials",
+    "difficulty": "hard",
+    "expected_keywords": ["appeal", "wheelchair"],
+    "expected_sources": ["iom"],
+    "description": "DME appeal documentation requirements"
+  },
+  {
+    "id": "appeals_levels",
+    "query": "What are the five levels of Medicare appeals?",
+    "category": "appeals_denials",
+    "difficulty": "medium",
+    "expected_keywords": ["appeal", "level"],
+    "expected_sources": ["iom"],
+    "description": "Medicare appeals levels"
+  },
+  {
+    "id": "denial_reasons",
+    "query": "Common reasons for Medicare claim denials",
+    "category": "appeals_denials",
+    "difficulty": "medium",
+    "expected_keywords": ["denial", "claim"],
+    "expected_sources": ["iom"],
+    "description": "Common denial reason codes and explanations"
+  },
+  {
+    "id": "redetermination_timeline",
+    "query": "How long does a provider have to file a Medicare redetermination?",
+    "category": "appeals_denials",
+    "difficulty": "medium",
+    "expected_keywords": ["redetermination"],
+    "expected_sources": ["iom"],
+    "description": "Redetermination filing timeline"
+  },
+
+  {
+    "id": "rehab_coverage",
+    "query": "Coverage for cardiac rehabilitation",
+    "category": "cross_source",
+    "difficulty": "medium",
+    "expected_keywords": ["cardiac", "rehab"],
+    "expected_sources": ["iom", "mcd"],
+    "description": "Cross-source: cardiac rehab should appear in both IOM and MCD"
+  },
+  {
+    "id": "diabetes_management_crossref",
+    "query": "Medicare coverage and coding for diabetes management and supplies",
+    "category": "cross_source",
+    "difficulty": "hard",
+    "expected_keywords": ["diabetes"],
+    "expected_sources": ["iom", "mcd", "codes"],
+    "description": "Cross-source: diabetes spans policy, LCD, and codes"
+  },
+  {
+    "id": "dme_coverage_and_codes",
+    "query": "Durable medical equipment coverage policy and HCPCS codes",
+    "category": "cross_source",
+    "difficulty": "hard",
+    "expected_keywords": ["durable medical equipment"],
+    "expected_sources": ["iom", "codes"],
+    "description": "Cross-source: DME policy plus HCPCS codes"
+  },
+  {
+    "id": "laboratory_tests_billing",
+    "query": "Medicare billing rules and codes for laboratory tests",
+    "category": "cross_source",
+    "difficulty": "hard",
+    "expected_keywords": ["laboratory", "test"],
+    "expected_sources": ["iom", "codes"],
+    "description": "Cross-source: lab billing from IOM + code sets"
+  },
+
+  {
+    "id": "sem_medical_necessity_natural",
+    "query": "When can Medicare deny a service because it wasn't medically needed?",
+    "category": "semantic_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["medical necessity", "medically necessary", "reasonable"],
+    "expected_sources": ["iom"],
+    "description": "Natural language phrasing of medical necessity"
+  },
+  {
+    "id": "sem_prior_auth",
+    "query": "Do I need approval before getting a procedure done under Medicare?",
+    "category": "semantic_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["prior authorization", "approval", "advance"],
+    "expected_sources": ["iom", "mcd"],
+    "description": "Prior authorization in natural language"
+  },
+  {
+    "id": "sem_ambulance_coverage",
+    "query": "Will Medicare pay for an ambulance ride to the hospital?",
+    "category": "semantic_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["ambulance", "transport"],
+    "expected_sources": ["iom"],
+    "description": "Ambulance coverage in conversational language"
+  },
+  {
+    "id": "sem_copay_deductible",
+    "query": "How much do patients have to pay out of pocket for Medicare Part B services?",
+    "category": "semantic_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["deductible", "coinsurance", "copay", "cost"],
+    "expected_sources": ["iom"],
+    "description": "Cost sharing in conversational language"
+  },
+  {
+    "id": "sem_surgery_coverage",
+    "query": "Is my surgery going to be covered by Medicare?",
+    "category": "semantic_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["surgery", "surgical", "procedure", "coverage"],
+    "expected_sources": ["iom"],
+    "description": "Surgery coverage in conversational query"
+  },
+
+  {
+    "id": "abbrev_snf",
+    "query": "SNF coverage requirements",
+    "category": "abbreviation",
+    "difficulty": "medium",
+    "expected_keywords": ["skilled nursing", "SNF"],
+    "expected_sources": ["iom"],
+    "description": "SNF abbreviation should resolve to skilled nursing facility"
+  },
+  {
+    "id": "abbrev_dme",
+    "query": "DME billing and coverage",
+    "category": "abbreviation",
+    "difficulty": "medium",
+    "expected_keywords": ["durable medical equipment", "DME"],
+    "expected_sources": ["iom", "codes"],
+    "description": "DME abbreviation retrieval"
+  },
+  {
+    "id": "abbrev_asc",
+    "query": "ASC payment and billing rules",
+    "category": "abbreviation",
+    "difficulty": "medium",
+    "expected_keywords": ["ambulatory surgical center", "ASC"],
+    "expected_sources": ["iom"],
+    "description": "Ambulatory Surgical Center abbreviation"
+  },
+  {
+    "id": "abbrev_mac",
+    "query": "MAC jurisdiction and contractor responsibilities",
+    "category": "abbreviation",
+    "difficulty": "medium",
+    "expected_keywords": ["Medicare Administrative Contractor", "MAC", "contractor"],
+    "expected_sources": ["iom", "mcd"],
+    "description": "Medicare Administrative Contractor abbreviation"
+  },
+  {
+    "id": "abbrev_opps",
+    "query": "OPPS payment methodology",
+    "category": "abbreviation",
+    "difficulty": "hard",
+    "expected_keywords": ["outpatient prospective payment", "OPPS"],
+    "expected_sources": ["iom"],
+    "description": "Outpatient Prospective Payment System abbreviation"
+  },
+
+  {
+    "id": "edge_very_short",
+    "query": "Medicare",
+    "category": "edge_case",
+    "difficulty": "easy",
+    "expected_keywords": ["Medicare"],
+    "expected_sources": ["iom", "mcd", "codes"],
+    "description": "Very short single-word query - should still return relevant results"
+  },
+  {
+    "id": "edge_specific_manual",
+    "query": "IOM 100-04 Chapter 1 general billing requirements",
+    "category": "edge_case",
+    "difficulty": "hard",
+    "expected_keywords": ["billing", "claim"],
+    "expected_sources": ["iom"],
+    "description": "Query referencing specific manual and chapter"
+  },
+  {
+    "id": "edge_multi_concept",
+    "query": "Medicare Part B outpatient cardiac rehabilitation billing with modifier 59 for distinct procedural service",
+    "category": "edge_case",
+    "difficulty": "hard",
+    "expected_keywords": ["cardiac", "modifier", "billing"],
+    "expected_sources": ["iom", "mcd", "codes"],
+    "description": "Complex multi-concept query spanning several topics"
+  },
+  {
+    "id": "edge_negation",
+    "query": "What services are NOT covered by Medicare Part B?",
+    "category": "edge_case",
+    "difficulty": "hard",
+    "expected_keywords": ["not covered", "excluded", "exclusion", "limitation"],
+    "expected_sources": ["iom"],
+    "description": "Negation query - should find exclusion/limitation content"
+  },
+
+  {
+    "id": "consistency_cardiac_rehab_1",
+    "query": "cardiac rehabilitation coverage criteria",
+    "category": "consistency",
+    "difficulty": "medium",
+    "expected_keywords": ["cardiac", "rehab"],
+    "expected_sources": ["iom", "mcd"],
+    "consistency_group": "cardiac_rehab",
+    "description": "Consistency pair 1: formal phrasing of cardiac rehab query"
+  },
+  {
+    "id": "consistency_cardiac_rehab_2",
+    "query": "Does Medicare cover cardiac rehab programs?",
+    "category": "consistency",
+    "difficulty": "medium",
+    "expected_keywords": ["cardiac", "rehab"],
+    "expected_sources": ["iom", "mcd"],
+    "consistency_group": "cardiac_rehab",
+    "description": "Consistency pair 2: natural language phrasing of same question"
+  },
+  {
+    "id": "consistency_wheelchair_1",
+    "query": "power wheelchair Medicare coverage policy",
+    "category": "consistency",
+    "difficulty": "medium",
+    "expected_keywords": ["wheelchair", "power"],
+    "expected_sources": ["iom", "mcd"],
+    "consistency_group": "wheelchair",
+    "description": "Consistency pair 1: keyword-style wheelchair query"
+  },
+  {
+    "id": "consistency_wheelchair_2",
+    "query": "What are the requirements for Medicare to pay for a power wheelchair?",
+    "category": "consistency",
+    "difficulty": "medium",
+    "expected_keywords": ["wheelchair", "power"],
+    "expected_sources": ["iom", "mcd"],
+    "consistency_group": "wheelchair",
+    "description": "Consistency pair 2: natural language wheelchair query"
+  },
+
+  {
+    "id": "program_integrity",
+    "query": "Medicare fraud and abuse prevention requirements",
+    "category": "compliance",
+    "difficulty": "medium",
+    "expected_keywords": ["fraud", "abuse"],
+    "expected_sources": ["iom"],
+    "description": "Program integrity and fraud prevention"
+  },
+  {
+    "id": "documentation_requirements",
+    "query": "What documentation must providers maintain for Medicare services?",
+    "category": "compliance",
+    "difficulty": "medium",
+    "expected_keywords": ["documentation", "record", "provider"],
+    "expected_sources": ["iom"],
+    "description": "Provider documentation requirements"
+  },
+  {
+    "id": "enrollment_requirements",
+    "query": "Medicare provider enrollment requirements and process",
+    "category": "compliance",
+    "difficulty": "medium",
+    "expected_keywords": ["enrollment", "provider"],
+    "expected_sources": ["iom"],
+    "description": "Provider enrollment in Medicare"
+  },
+
+  {
+    "id": "payment_drg",
+    "query": "How does the DRG-based payment system work for inpatient hospitals?",
+    "category": "payment",
+    "difficulty": "hard",
+    "expected_keywords": ["DRG", "inpatient", "payment", "prospective"],
+    "expected_sources": ["iom"],
+    "description": "DRG prospective payment system"
+  },
+  {
+    "id": "payment_apc",
+    "query": "APC payment methodology for outpatient hospital services",
+    "category": "payment",
+    "difficulty": "hard",
+    "expected_keywords": ["APC", "outpatient", "payment"],
+    "expected_sources": ["iom"],
+    "description": "Ambulatory Payment Classification"
+  },
+  {
+    "id": "payment_physician_fee_schedule",
+    "query": "Medicare physician fee schedule and RVU-based payment",
+    "category": "payment",
+    "difficulty": "hard",
+    "expected_keywords": ["fee schedule", "physician", "payment"],
+    "expected_sources": ["iom"],
+    "description": "MPFS and relative value unit payment"
+  }
 ]

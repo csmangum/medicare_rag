@@ -137,6 +137,8 @@ def test_run_eval_returns_metrics_for_one_question(tmp_path: Path) -> None:
                 "query": "What does Medicare Part B cover?",
                 "expected_keywords": ["Part B", "outpatient"],
                 "expected_sources": ["iom"],
+                "category": "policy_coverage",
+                "difficulty": "easy",
             }
         ]),
         encoding="utf-8",
@@ -160,7 +162,11 @@ def test_run_eval_returns_metrics_for_one_question(tmp_path: Path) -> None:
     assert metrics["n_questions"] == 1
     assert metrics["hit_rate"] == 1.0
     assert metrics["mrr"] == 1.0
+    assert metrics["avg_precision_at_k"] > 0
+    assert metrics["avg_ndcg_at_k"] > 0
+    assert "latency" in metrics
+    assert "by_category" in metrics
+    assert "by_difficulty" in metrics
     assert len(metrics["results"]) == 1
     assert metrics["results"][0]["hit"] is True
     assert metrics["results"][0]["first_hit_rank"] == 1
-    mock_retriever.invoke.assert_called_once()

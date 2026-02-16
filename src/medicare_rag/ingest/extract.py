@@ -197,8 +197,24 @@ def _cell_to_text(k: str, v: str) -> str | None:
     return None
 
 
+def _extract_nested_csv_zips(dir_path: Path) -> list[Path]:
+    """Extract any *_csv.zip (or *csv*.zip) in dir_path into dir_path; return list of .csv paths."""
+    csv_zips = list(dir_path.glob("*_csv.zip")) or list(dir_path.glob("*csv*.zip"))
+    for csv_zip in csv_zips:
+        try:
+            with zipfile.ZipFile(csv_zip, "r") as zf:
+                for info in zf.infolist():
+                    target = (dir_path / info.filename).resolve()
+                    if not target.is_relative_to(dir_path.resolve()):
+                        continue
+                    zf.extract(info, dir_path)
+        except (zipfile.BadZipFile, OSError) as e:
+            logger.warning("Failed to extract nested CSV zip %s: %s", csv_zip, e)
+    return list(dir_path.rglob("*.csv"))
+
+
 def _extract_mcd_zip(mcd_dir: Path, inner_zip_path: Path, subdir_name: str) -> list[Path]:
-    """Extract inner zip to mcd_dir/subdir_name/; return list of CSV paths."""
+    """Extract inner zip to mcd_dir/subdir_name/; then any nested *_csv.zip; return list of CSV paths."""
     out_sub = mcd_dir / subdir_name
     out_sub.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(inner_zip_path, "r") as zf:
@@ -207,7 +223,10 @@ def _extract_mcd_zip(mcd_dir: Path, inner_zip_path: Path, subdir_name: str) -> l
             if not target.is_relative_to(out_sub.resolve()):
                 continue
             zf.extract(info, out_sub)
-    return list(out_sub.rglob("*.csv"))
+    csv_files = list(out_sub.rglob("*.csv"))
+    if not csv_files:
+        csv_files = _extract_nested_csv_zips(out_sub)
+    return csv_files
 
 
 def extract_mcd(processed_dir: Path, raw_dir: Path, *, force: bool = False) -> list[tuple[Path, Path]]:
@@ -229,6 +248,8 @@ def extract_mcd(processed_dir: Path, raw_dir: Path, *, force: bool = False) -> l
         zpath = mcd_dir / zip_name
         extracted_dir = mcd_dir / zip_name.replace(".zip", "")
         csv_files = list(extracted_dir.rglob("*.csv")) if extracted_dir.exists() else []
+        if not csv_files and extracted_dir.exists():
+            csv_files = _extract_nested_csv_zips(extracted_dir)
         if not csv_files and zpath.exists():
             try:
                 csv_files = _extract_mcd_zip(mcd_dir, zpath, zip_name.replace(".zip", ""))
