@@ -1,9 +1,13 @@
 """ChromaDB vector store (Phase 3)."""
 import hashlib
 import logging
+from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+
+if TYPE_CHECKING:
+    from langchain_chroma import Chroma
 
 from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME
 
@@ -36,7 +40,7 @@ def _content_hash(doc: Document) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def get_or_create_chroma(embeddings: Embeddings):
+def get_or_create_chroma(embeddings: Embeddings) -> "Chroma":
     """Return a LangChain Chroma instance (persist_directory, collection_name, embedding_function)."""
     from langchain_chroma import Chroma
 
@@ -49,7 +53,7 @@ def get_or_create_chroma(embeddings: Embeddings):
 
 
 def upsert_documents(
-    store,
+    store: "Chroma",
     documents: list[Document],
     embeddings: Embeddings,
 ) -> tuple[int, int]:
@@ -64,8 +68,9 @@ def upsert_documents(
     existing = collection.get(include=["metadatas"])
     id_to_hash = {}
     if existing and existing.get("ids"):
+        metadatas_list = existing.get("metadatas") or []
         for i, id_ in enumerate(existing["ids"]):
-            meta = (existing.get("metadatas") or [{}])[i] or {}
+            meta = (metadatas_list[i] if i < len(metadatas_list) else None) or {}
             id_to_hash[id_] = meta.get("content_hash", "")
 
     to_upsert: list[Document] = []
