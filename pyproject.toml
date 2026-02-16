@@ -26,6 +26,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ui = ["streamlit>=1.28.0"]
 dev = ["ruff"]
 # Optional: enables PDF fallback for scanned/image PDFs when pdfplumber yields little text.
 # Without it, those PDFs may yield empty or short extractions.
