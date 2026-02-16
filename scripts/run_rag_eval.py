@@ -27,6 +27,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_EVAL_FILE = _SCRIPT_DIR / "eval_questions.json"
 
 SOURCE_META_KEYS = ("source", "manual", "chapter", "doc_id", "jurisdiction", "title")
+EVAL_QUESTION_EXTRA_KEYS = ("category", "difficulty", "description")
 
 
 def _format_source_meta(doc_meta: dict) -> str:
@@ -113,8 +114,21 @@ def main() -> int:
     for i, q in enumerate(questions, start=1):
         qid = q.get("id", "?")
         query = q.get("query", "")
+        category = q.get("category", "")
+        difficulty = q.get("difficulty", "")
+        description = q.get("description", "")
         lines.append(f"## {i}. [{qid}] {query}")
         lines.append("")
+        meta_parts = []
+        if category:
+            meta_parts.append(f"Category: {category}")
+        if difficulty:
+            meta_parts.append(f"Difficulty: {difficulty}")
+        if description:
+            meta_parts.append(f"Description: {description}")
+        if meta_parts:
+            lines.append(f"> {' | '.join(meta_parts)}")
+            lines.append("")
         try:
             if rag_chain is None:
                 raise RuntimeError("RAG chain not initialized")
