@@ -23,6 +23,7 @@ dependencies = [
     "python-dotenv",
     "pytest",
     "sentence-transformers",
+    "streamlit",
 ]
 
 [project.optional-dependencies]
