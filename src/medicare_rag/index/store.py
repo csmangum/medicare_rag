@@ -32,7 +32,7 @@ def _chunk_id(doc: Document) -> str:
 def _content_hash(doc: Document) -> str:
     doc_id = doc.metadata.get("doc_id", "unknown")
     chunk_index = doc.metadata.get("chunk_index", 0)
-    payload = f"{doc.page_content}{doc_id}{chunk_index}"
+    payload = f"{doc.page_content}\x00{doc_id}\x00{chunk_index}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
