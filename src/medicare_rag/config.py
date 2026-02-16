@@ -25,8 +25,7 @@ EMBEDDING_MODEL = os.environ.get(
     "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
 )
 
-# Phase 4: OpenRouter for generation
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+# Phase 4: local LLM (Hugging Face pipeline, runs with sentence-transformers stack)
+LOCAL_LLM_MODEL = os.environ.get(
+    "LOCAL_LLM_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+)

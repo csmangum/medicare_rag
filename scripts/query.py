@@ -9,7 +9,7 @@ Usage:
 import argparse
 import sys
 
-from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME, OPENROUTER_API_KEY
+from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME
 from medicare_rag.query.chain import build_rag_chain
 
 
@@ -53,13 +53,6 @@ def main() -> int:
             metadata_filter["manual"] = args.filter_manual
         if args.filter_jurisdiction:
             metadata_filter["jurisdiction"] = args.filter_jurisdiction
-
-    if not OPENROUTER_API_KEY:
-        print(
-            "Error: OPENROUTER_API_KEY is not set. Set it in the environment or .env.",
-            file=sys.stderr,
-        )
-        return 1
 
     if not CHROMA_DIR.exists():
         print(

@@ -92,7 +92,7 @@ def test_build_rag_chain_returns_callable() -> None:
     class FakeResponse:
         content = "Test answer from LLM."
 
-    with patch("medicare_rag.query.chain.OPENROUTER_API_KEY", "test-key"), patch(
+    with patch("medicare_rag.query.chain._create_llm", return_value=MagicMock()), patch(
         "medicare_rag.query.chain.get_retriever", return_value=mock_retriever
     ), patch("medicare_rag.query.chain._invoke_chain", return_value=FakeResponse()):
         invoke = build_rag_chain(retriever=mock_retriever)
@@ -114,7 +114,7 @@ def test_run_rag_returns_answer_and_source_docs() -> None:
     class FakeResponse:
         content = "Cited answer."
 
-    with patch("medicare_rag.query.chain.OPENROUTER_API_KEY", "test-key"), patch(
+    with patch("medicare_rag.query.chain._create_llm", return_value=MagicMock()), patch(
         "medicare_rag.query.chain.get_retriever", return_value=mock_retriever
     ), patch("medicare_rag.query.chain._invoke_chain", return_value=FakeResponse()):
         answer, source_docs = run_rag("What does the policy say?", retriever=mock_retriever)

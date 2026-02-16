@@ -1,15 +1,11 @@
-"""RAG chain with OpenRouter (Phase 4)."""
+"""RAG chain with local Hugging Face LLM (Phase 4)."""
 from typing import Any, Callable
 
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
 
-from medicare_rag.config import (
-    OPENROUTER_API_KEY,
-    OPENROUTER_BASE_URL,
-    OPENROUTER_MODEL,
-)
+from medicare_rag.config import LOCAL_LLM_MODEL
 from medicare_rag.query.retriever import get_retriever
 
 SYSTEM_PROMPT = """You are a Medicare Revenue Cycle Management assistant. Answer the user's question using ONLY the provided context. Cite sources using [1], [2], etc. corresponding to the numbered context items. If the context is insufficient to answer, say so explicitly. This is not legal or medical advice."""
@@ -31,16 +27,18 @@ def _format_context(docs: list[Document]) -> str:
     )
 
 
-def _create_llm() -> ChatOpenAI:
-    if not OPENROUTER_API_KEY:
-        raise ValueError(
-            "OPENROUTER_API_KEY is not set. Please configure it before using the RAG chain."
-        )
-    return ChatOpenAI(
-        base_url=OPENROUTER_BASE_URL,
-        api_key=OPENROUTER_API_KEY,
-        model=OPENROUTER_MODEL,
+def _create_llm() -> ChatHuggingFace:
+    """Create local chat model using Hugging Face pipeline (no API key)."""
+    llm = HuggingFacePipeline.from_model_id(
+        model_id=LOCAL_LLM_MODEL,
+        task="text-generation",
+        pipeline_kwargs=dict(
+            max_new_tokens=512,
+            do_sample=False,
+            repetition_penalty=1.05,
+        ),
     )
+    return ChatHuggingFace(llm=llm)
 
 
 def build_rag_chain(
