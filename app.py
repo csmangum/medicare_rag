@@ -45,7 +45,9 @@ def _get_collection_meta(_store) -> dict[str, Any]:
     Cache will automatically invalidate after TTL expires, allowing new documents
     to appear in filters.
     
-    Note: _store is prefixed with underscore to exclude from cache key.
+    Args:
+        _store: Chroma vector store. Underscore prefix follows Streamlit convention
+                to exclude this parameter from the cache key (only TTL-based invalidation).
     """
     collection = _store._collection
     count = collection.count()
