@@ -87,13 +87,6 @@ def _iom_chapter_from_path(manual_id: str, rel_path: Path) -> str | None:
     return None
 
 
-def _extract_pdf_page_pdfplumber(pdf_path: Path, page_num: int) -> str:
-    with pdfplumber.open(pdf_path) as pdf:
-        if page_num >= len(pdf.pages):
-            return ""
-        return (pdf.pages[page_num].extract_text() or "").strip()
-
-
 def _extract_pdf_page_unstructured(pdf_path: Path, page_num: int) -> str:
     try:
         from unstructured.partition.pdf import partition_pdf
@@ -123,7 +116,7 @@ def _extract_iom_pdf(pdf_path: Path, manual_id: str, chapter: str | None) -> str
                 parts.append(text)
     result = "\n\n".join(parts)
     # If pdfplumber got very little (e.g. scanned/image PDF), try unstructured once
-    if parts and (len(result) / len(parts)) < _PDF_MIN_CHARS_PER_PAGE:
+    if not parts or (len(result) / len(parts)) < _PDF_MIN_CHARS_PER_PAGE:
         fallback = _extract_pdf_page_unstructured(pdf_path, 0)
         if len(fallback) > len(result):
             result = fallback
@@ -318,6 +311,39 @@ def _format_date_yyyymmdd(s: str) -> str | None:
         return None
 
 
+def _write_hcpcs_record(
+    processed_dir: Path,
+    current: dict,
+    force: bool,
+    written: list[tuple[Path, Path]],
+) -> None:
+    """Write a single HCPCS record to disk."""
+    doc_id = current["code"].strip()
+    if not doc_id:
+        return
+    safe_id = re.sub(r"[^\w\-]", "_", doc_id)
+    out_txt = processed_dir / "codes" / "hcpcs" / f"{safe_id}.txt"
+    out_meta = processed_dir / "codes" / "hcpcs" / f"{safe_id}.meta.json"
+    if not force and out_txt.exists() and out_meta.exists():
+        written.append((out_txt, out_meta))
+    else:
+        content = f"Code: {current['code']}\n\nLong description: {current['long_desc']}\n\nShort description: {current['short_desc']}"
+        meta = _meta_schema(
+            source="codes",
+            manual=None,
+            chapter=None,
+            title=current["short_desc"] or None,
+            effective_date=_format_date_yyyymmdd(current["effective_date"]),
+            source_url=None,
+            jurisdiction=None,
+            doc_id=f"hcpcs_{current['code']}",
+            hcpcs_code=current["code"],
+            code_type="modifier" if current["ric"] == "7" else "procedure",
+        )
+        txt_path, meta_path = _write_doc(processed_dir, "codes/hcpcs", safe_id, content, meta)
+        written.append((txt_path, meta_path))
+
+
 def extract_hcpcs(processed_dir: Path, raw_dir: Path, *, force: bool = False) -> list[tuple[Path, Path]]:
     """Parse HCPCS fixed-width .txt; one doc per code (merge continuation lines)."""
     hcpcs_base = raw_dir / "codes" / "hcpcs"
@@ -343,58 +369,14 @@ def extract_hcpcs(processed_dir: Path, raw_dir: Path, *, force: bool = False) ->
             ric = rec["ric"]
             if ric in ("3", "7"):
                 if current:
-                    doc_id = current["code"].strip()
-                    if not doc_id:
-                        current = rec
-                        continue
-                    safe_id = re.sub(r"[^\w\-]", "_", doc_id)
-                    out_txt = processed_dir / "codes" / "hcpcs" / f"{safe_id}.txt"
-                    out_meta = processed_dir / "codes" / "hcpcs" / f"{safe_id}.meta.json"
-                    if not force and out_txt.exists() and out_meta.exists():
-                        written.append((out_txt, out_meta))
-                    else:
-                        content = f"Code: {current['code']}\n\nLong description: {current['long_desc']}\n\nShort description: {current['short_desc']}"
-                        meta = _meta_schema(
-                            source="codes",
-                            manual=None,
-                            chapter=None,
-                            title=current["short_desc"] or None,
-                            effective_date=_format_date_yyyymmdd(current["effective_date"]),
-                            source_url=None,
-                            jurisdiction=None,
-                            doc_id=f"hcpcs_{current['code']}",
-                            hcpcs_code=current["code"],
-                            code_type="modifier" if current["ric"] == "7" else "procedure",
-                        )
-                        txt_path, meta_path = _write_doc(processed_dir, "codes/hcpcs", safe_id, content, meta)
-                        written.append((txt_path, meta_path))
+                    _write_hcpcs_record(processed_dir, current, force, written)
                 current = rec
             elif ric in ("4", "8") and current:
                 current["long_desc"] = (current["long_desc"] + " " + rec["long_desc"]).strip()
             else:
                 current = None
         if current and current.get("code", "").strip():
-            doc_id = re.sub(r"[^\w\-]", "_", current["code"].strip())
-            out_txt = processed_dir / "codes" / "hcpcs" / f"{doc_id}.txt"
-            out_meta = processed_dir / "codes" / "hcpcs" / f"{doc_id}.meta.json"
-            if not force and out_txt.exists() and out_meta.exists():
-                written.append((out_txt, out_meta))
-            else:
-                content = f"Code: {current['code']}\n\nLong description: {current['long_desc']}\n\nShort description: {current['short_desc']}"
-                meta = _meta_schema(
-                    source="codes",
-                    manual=None,
-                    chapter=None,
-                    title=current["short_desc"] or None,
-                    effective_date=_format_date_yyyymmdd(current["effective_date"]),
-                    source_url=None,
-                    jurisdiction=None,
-                    doc_id=f"hcpcs_{current['code']}",
-                    hcpcs_code=current["code"],
-                    code_type="modifier" if current["ric"] == "7" else "procedure",
-                )
-                txt_path, meta_path = _write_doc(processed_dir, "codes/hcpcs", doc_id, content, meta)
-                written.append((txt_path, meta_path))
+            _write_hcpcs_record(processed_dir, current, force, written)
         logger.info("HCPCS: wrote from %s", hcpcs_file.name)
     return written
 
@@ -417,35 +399,35 @@ def extract_icd10cm(processed_dir: Path, raw_dir: Path, *, force: bool = False) 
                     with zf.open(xml_name) as f:
                         import xml.etree.ElementTree as ET
                         root = ET.parse(f).getroot()
-                # Common CDC structure: diag/diagCode or similar
-                for elem in root.iter():
-                    code = elem.find("code") or elem.find("codeValue") or elem.find("code_value")
-                    desc = elem.find("desc") or elem.find("description") or elem.find("shortDescription")
-                    if code is not None and desc is not None and code.text:
-                        code_val = (code.text or "").strip()
-                        desc_val = (desc.text or "").strip()
-                        if not code_val:
-                            continue
-                        doc_id = re.sub(r"[^\w\-.]", "_", code_val)
-                        out_txt = processed_dir / "codes" / "icd10cm" / f"{doc_id}.txt"
-                        out_meta = processed_dir / "codes" / "icd10cm" / f"{doc_id}.meta.json"
-                        if not force and out_txt.exists() and out_meta.exists():
-                            written.append((out_txt, out_meta))
-                            continue
-                        content = f"Code: {code_val}\n\nDescription: {desc_val}"
-                        meta = _meta_schema(
-                            source="codes",
-                            manual=None,
-                            chapter=None,
-                            title=desc_val[:200] if desc_val else None,
-                            effective_date=None,
-                            source_url=None,
-                            jurisdiction=None,
-                            doc_id=f"icd10cm_{code_val}",
-                            icd10_code=code_val,
-                        )
-                        txt_path, meta_path = _write_doc(processed_dir, "codes/icd10cm", doc_id, content, meta)
-                        written.append((txt_path, meta_path))
+                    # Common CDC structure: diag/diagCode or similar
+                    for elem in root.iter():
+                        code = elem.find("code") or elem.find("codeValue") or elem.find("code_value")
+                        desc = elem.find("desc") or elem.find("description") or elem.find("shortDescription")
+                        if code is not None and desc is not None and code.text:
+                            code_val = (code.text or "").strip()
+                            desc_val = (desc.text or "").strip()
+                            if not code_val:
+                                continue
+                            doc_id = re.sub(r"[^\w\-.]", "_", code_val)
+                            out_txt = processed_dir / "codes" / "icd10cm" / f"{doc_id}.txt"
+                            out_meta = processed_dir / "codes" / "icd10cm" / f"{doc_id}.meta.json"
+                            if not force and out_txt.exists() and out_meta.exists():
+                                written.append((out_txt, out_meta))
+                                continue
+                            content = f"Code: {code_val}\n\nDescription: {desc_val}"
+                            meta = _meta_schema(
+                                source="codes",
+                                manual=None,
+                                chapter=None,
+                                title=desc_val[:200] if desc_val else None,
+                                effective_date=None,
+                                source_url=None,
+                                jurisdiction=None,
+                                doc_id=f"icd10cm_{code_val}",
+                                icd10_code=code_val,
+                            )
+                            txt_path, meta_path = _write_doc(processed_dir, "codes/icd10cm", doc_id, content, meta)
+                            written.append((txt_path, meta_path))
         except Exception as e:
             logger.warning("ICD-10-CM %s: %s", zip_path, e)
     return written
