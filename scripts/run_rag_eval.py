@@ -27,7 +27,6 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_EVAL_FILE = _SCRIPT_DIR / "eval_questions.json"
 
 SOURCE_META_KEYS = ("source", "manual", "chapter", "doc_id", "jurisdiction", "title")
-EVAL_QUESTION_EXTRA_KEYS = ("category", "difficulty", "description")
 
 
 def _format_source_meta(doc_meta: dict) -> str:

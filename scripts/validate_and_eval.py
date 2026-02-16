@@ -478,10 +478,21 @@ def run_eval(
         logger.warning("Eval file is empty")
         return {"n_questions": 0}
 
+    # Validate question ID uniqueness for correct multi-k caching
+    qids = [q.get("id", "?") for q in questions]
+    qid_counts = Counter(qids)
+    duplicates = {qid: count for qid, count in qid_counts.items() if count > 1}
+    if duplicates:
+        logger.error(
+            "Duplicate question IDs found (this corrupts multi-k metrics): %s",
+            duplicates
+        )
+        return {"n_questions": 0, "error": "duplicate_question_ids"}
+
     if k_values is None:
         k_values = [k]
 
-    retriever = _load_retriever(k=max(k_values), metadata_filter=metadata_filter)
+    retriever = _load_retriever(k=max(max(k_values), k), metadata_filter=metadata_filter)
 
     # Per-question results at the primary k
     per_question: list[dict] = []
@@ -898,6 +909,7 @@ def main() -> int:
 
         # Pre-filter questions by category/difficulty if requested
         eval_path = args.eval_file
+        temp_eval_path = None
         if args.filter_category or args.filter_difficulty:
             with open(eval_path, encoding="utf-8") as f:
                 all_questions = json.load(f)
@@ -919,7 +931,8 @@ def main() -> int:
                 mode="w", suffix=".json", delete=False, encoding="utf-8"
             ) as tmp:
                 json.dump(filtered, tmp, indent=2)
-                eval_path = Path(tmp.name)
+                temp_eval_path = Path(tmp.name)
+                eval_path = temp_eval_path
             logger.info(
                 "Filtered to %d questions (category=%s, difficulty=%s)",
                 len(filtered),
@@ -927,24 +940,29 @@ def main() -> int:
                 args.filter_difficulty,
             )
 
-        metrics = run_eval(
-            eval_path,
-            k=args.k,
-            metadata_filter=metadata_filter,
-            k_values=k_values,
-        )
-        all_output["evaluation"] = metrics
+        try:
+            metrics = run_eval(
+                eval_path,
+                k=args.k,
+                metadata_filter=metadata_filter,
+                k_values=k_values,
+            )
+            all_output["evaluation"] = metrics
 
-        if not metrics:
-            return 1
+            if not metrics:
+                return 1
 
-        if args.json:
-            # Strip per-question relevances from JSON to keep it cleaner
-            for r in metrics.get("results", []):
-                r.pop("relevances", None)
-        else:
-            for line in _format_report(metrics):
-                logger.info(line)
+            if args.json:
+                # Strip per-question relevances from JSON to keep it cleaner
+                for r in metrics.get("results", []):
+                    r.pop("relevances", None)
+            else:
+                for line in _format_report(metrics):
+                    logger.info(line)
+        finally:
+            # Clean up temp file if created
+            if temp_eval_path and temp_eval_path.exists():
+                temp_eval_path.unlink()
 
     if args.json:
         print(json.dumps(all_output, indent=2, default=str))
