@@ -37,11 +37,14 @@ def _load_store():
     return get_or_create_chroma(emb)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=300)
 def _get_collection_meta(_store) -> dict[str, Any]:
     """Gather metadata stats from the Chroma collection for filter options.
     
-    Cached to avoid reloading all metadata on every rerun.
+    Cached for 5 minutes to avoid reloading all metadata on every rerun.
+    Cache will automatically invalidate after TTL expires, allowing new documents
+    to appear in filters.
+    
     Note: _store is prefixed with underscore to exclude from cache key.
     """
     collection = _store._collection

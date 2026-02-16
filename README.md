@@ -90,7 +90,7 @@ streamlit run app.py
 ```
 
 The UI provides:
-- Search bar with quick-check questions
+- Search bar with quick-check question buttons
 - Metadata filters (source, manual, jurisdiction)
 - Advanced options (top-k results, distance threshold, full content display)
 - Styled result cards with similarity scores and metadata
