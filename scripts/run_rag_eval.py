@@ -73,7 +73,6 @@ def main() -> int:
 
     from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME, DATA_DIR
     from medicare_rag.query.retriever import get_retriever
-    from medicare_rag.query.chain import run_rag
 
     out_path = args.out if args.out is not None else DATA_DIR / "rag_eval_report.md"
 
@@ -101,17 +100,29 @@ def main() -> int:
         "",
     ]
 
+    # Build RAG chain once before loop to avoid reloading LLM for every question
+    from medicare_rag.query.chain import build_rag_chain
+    try:
+        rag_chain = build_rag_chain(retriever=retriever, k=args.k)
+    except Exception as e:
+        logger.error("Failed to build RAG chain: %s", e)
+        rag_chain = None
+
     for i, q in enumerate(questions, start=1):
         qid = q.get("id", "?")
         query = q.get("query", "")
         lines.append(f"## {i}. [{qid}] {query}")
         lines.append("")
-        docs = retriever.invoke(query)
         try:
-            answer, source_docs = run_rag(query, retriever=retriever, k=args.k)
+            if rag_chain is None:
+                raise RuntimeError("RAG chain not initialized")
+            result = rag_chain({"question": query})
+            answer = result["answer"]
+            source_docs = result["source_documents"]
         except Exception as e:
             answer = f"LLM not configured or error: {e}"
-            source_docs = docs
+            # Fallback: retrieve docs only when LLM fails
+            source_docs = retriever.invoke(query)
         lines.append("### Answer")
         lines.append("")
         lines.append(answer)
