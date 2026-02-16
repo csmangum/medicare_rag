@@ -5,11 +5,12 @@ Usage:
   python scripts/query.py
   python scripts/query.py --filter-source iom --filter-manual 100-02
 """
+
 import argparse
 import sys
 
 from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME, OPENROUTER_API_KEY
-from medicare_rag.query.chain import run_rag
+from medicare_rag.query.chain import build_rag_chain
 
 
 SOURCE_META_KEYS = ("source", "manual", "chapter", "doc_id", "jurisdiction", "title")
@@ -18,6 +19,7 @@ SOURCE_META_KEYS = ("source", "manual", "chapter", "doc_id", "jurisdiction", "ti
 def _check_index_has_docs() -> bool:
     try:
         from medicare_rag.index import get_embeddings, get_or_create_chroma
+
         embeddings = get_embeddings()
         store = get_or_create_chroma(embeddings)
         n = store._collection.count()
@@ -28,10 +30,18 @@ def _check_index_has_docs() -> bool:
 
 def _main() -> None:
     parser = argparse.ArgumentParser(description="Medicare RAG query REPL")
-    parser.add_argument("--filter-source", type=str, help="Filter by source (e.g. iom, mcd, codes)")
-    parser.add_argument("--filter-manual", type=str, help="Filter by manual (e.g. 100-02)")
-    parser.add_argument("--filter-jurisdiction", type=str, help="Filter by jurisdiction (e.g. JL)")
-    parser.add_argument("-k", type=int, default=8, help="Number of chunks to retrieve (default 8)")
+    parser.add_argument(
+        "--filter-source", type=str, help="Filter by source (e.g. iom, mcd, codes)"
+    )
+    parser.add_argument(
+        "--filter-manual", type=str, help="Filter by manual (e.g. 100-02)"
+    )
+    parser.add_argument(
+        "--filter-jurisdiction", type=str, help="Filter by jurisdiction (e.g. JL)"
+    )
+    parser.add_argument(
+        "-k", type=int, default=8, help="Number of chunks to retrieve (default 8)"
+    )
     args = parser.parse_args()
 
     metadata_filter = None
@@ -45,19 +55,31 @@ def _main() -> None:
             metadata_filter["jurisdiction"] = args.filter_jurisdiction
 
     if not OPENROUTER_API_KEY:
-        print("Error: OPENROUTER_API_KEY is not set. Set it in the environment or .env.", file=sys.stderr)
+        print(
+            "Error: OPENROUTER_API_KEY is not set. Set it in the environment or .env.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     if not CHROMA_DIR.exists():
-        print(f"Error: Chroma index not found at {CHROMA_DIR}. Run ingestion first (scripts/ingest_all.py).", file=sys.stderr)
+        print(
+            f"Error: Chroma index not found at {CHROMA_DIR}. Run ingestion first (scripts/ingest_all.py).",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     if not _check_index_has_docs():
-        print(f"Error: Collection {COLLECTION_NAME} is empty. Run ingestion first (scripts/ingest_all.py).", file=sys.stderr)
+        print(
+            f"Error: Collection {COLLECTION_NAME} is empty. Run ingestion first (scripts/ingest_all.py).",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     print("Medicare RAG query (blank line to quit)")
     print("---")
+
+    # Build the RAG chain once before the loop to avoid rebuilding on every question
+    chain = build_rag_chain(k=args.k, metadata_filter=metadata_filter)
 
     while True:
         try:
@@ -67,11 +89,9 @@ def _main() -> None:
         if not question:
             break
         try:
-            answer, source_docs = run_rag(
-                question,
-                k=args.k,
-                metadata_filter=metadata_filter,
-            )
+            result = chain({"question": question})
+            answer = result["answer"]
+            source_docs = result["source_documents"]
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
             continue
