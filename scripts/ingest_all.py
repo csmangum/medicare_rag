@@ -37,6 +37,11 @@ def main() -> int:
         action="store_true",
         help="Skip extraction; only run chunking on existing processed dir",
     )
+    parser.add_argument(
+        "--skip-index",
+        action="store_true",
+        help="Skip embed and vector store; only run extract and chunk",
+    )
     args = parser.parse_args()
 
     processed_dir = PROCESSED_DIR
@@ -53,6 +58,13 @@ def main() -> int:
         docs = chunk_documents(processed_dir, source=args.source)
         logger.info("Chunking: %d chunks produced", len(docs))
         print(f"Documents (chunks): {len(docs)}")
+
+        if not args.skip_index:
+            from medicare_rag.index import get_embeddings, get_or_create_chroma, upsert_documents
+            embeddings = get_embeddings()
+            store = get_or_create_chroma(embeddings)
+            n_upserted, n_skipped = upsert_documents(store, docs, embeddings)
+            logger.info("Indexed %d new/updated, %d unchanged", n_upserted, n_skipped)
     except Exception as e:
         logger.exception("Ingest failed: %s", e)
         return 1

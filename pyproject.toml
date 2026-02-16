@@ -10,12 +10,17 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "beautifulsoup4",
+    "chromadb",
     "httpx",
+    "langchain-chroma",
+    "langchain-community",
     "langchain-core",
+    "langchain-huggingface",
     "langchain-text-splitters",
     "pdfplumber",
     "python-dotenv",
     "pytest",
+    "sentence-transformers",
 ]
 
 [project.optional-dependencies]
