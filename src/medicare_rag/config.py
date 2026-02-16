@@ -25,6 +25,8 @@ EMBEDDING_MODEL = os.environ.get(
     "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
 )
 
-# Placeholders for Phase 4 (generation only)
+# Phase 4: OpenRouter for generation
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")

@@ -16,6 +16,7 @@ dependencies = [
     "langchain-community",
     "langchain-core",
     "langchain-huggingface",
+    "langchain-openai",
     "langchain-text-splitters",
     "pdfplumber",
     "python-dotenv",
