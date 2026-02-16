@@ -1,50 +1,12 @@
 [
-  {
-    "id": "coverage_part_b",
-    "query": "What does Medicare Part B cover?",
-    "expected_keywords": ["Part B", "outpatient", "medical", "coverage"],
-    "expected_sources": ["iom", "mcd"]
-  },
-  {
-    "id": "ncd_lcd",
-    "query": "National Coverage Determination vs Local Coverage Determination",
-    "expected_keywords": ["NCD", "LCD", "national", "local", "coverage determination"],
-    "expected_sources": ["iom", "mcd"]
-  },
-  {
-    "id": "claims_processing",
-    "query": "How are Medicare claims processed and submitted?",
-    "expected_keywords": ["claim", "submit", "processing", "billing"],
-    "expected_sources": ["iom"]
-  },
-  {
-    "id": "hcpcs_codes",
-    "query": "HCPCS Level II codes for supplies and procedures",
-    "expected_keywords": ["HCPCS", "code", "supply", "procedure"],
-    "expected_sources": ["codes"]
-  },
-  {
-    "id": "medical_necessity",
-    "query": "Medical necessity documentation requirements",
-    "expected_keywords": ["medical necessity", "documentation", "necessity"],
-    "expected_sources": ["iom", "mcd"]
-  },
-  {
-    "id": "modifiers",
-    "query": "CPT modifiers for Medicare billing",
-    "expected_keywords": ["modifier", "CPT", "billing", "Medicare"],
-    "expected_sources": ["iom", "codes"]
-  },
-  {
-    "id": "appeals",
-    "query": "Medicare appeal process for denied claims",
-    "expected_keywords": ["appeal", "denied", "redetermination", "reconsideration"],
-    "expected_sources": ["iom"]
-  },
-  {
-    "id": "rehab_coverage",
-    "query": "Coverage for cardiac rehabilitation",
-    "expected_keywords": ["cardiac", "rehab", "rehabilitation", "coverage"],
-    "expected_sources": ["iom", "mcd"]
-  }
+  {"id": "coverage_part_b", "query": "What does Medicare Part B cover?", "expected_keywords": ["Part B", "outpatient", "medical", "coverage"], "expected_sources": ["iom", "mcd"]},
+  {"id": "hyperbaric_diabetic_wounds", "query": "Is hyperbaric oxygen therapy covered for diabetic wounds?", "expected_keywords": ["hyperbaric", "oxygen", "diabetic", "wound", "coverage"], "expected_sources": ["iom", "mcd"]},
+  {"id": "icd10_diabetes_foot_ulcer", "query": "What ICD-10 code maps to type 2 diabetes with foot ulcer?", "expected_keywords": ["ICD-10", "diabetes", "foot", "ulcer", "code"], "expected_sources": ["codes"]},
+  {"id": "bilateral_modifier", "query": "What modifier is required for bilateral procedures under Medicare Part B?", "expected_keywords": ["modifier", "bilateral", "Part B", "procedure"], "expected_sources": ["iom", "codes"]},
+  {"id": "novitas_cardiac_rehab", "query": "Does Novitas (JL) have an LCD for cardiac rehab?", "expected_keywords": ["Novitas", "JL", "LCD", "cardiac", "rehab"], "expected_sources": ["mcd"]},
+  {"id": "claims_processing", "query": "How are Medicare claims processed and submitted?", "expected_keywords": ["claim", "submit", "processing", "billing"], "expected_sources": ["iom"]},
+  {"id": "hcpcs_codes", "query": "HCPCS Level II codes for supplies and procedures", "expected_keywords": ["HCPCS", "code", "supply", "procedure"], "expected_sources": ["codes"]},
+  {"id": "modifiers", "query": "CPT modifiers for Medicare billing", "expected_keywords": ["modifier", "CPT", "billing", "Medicare"], "expected_sources": ["iom", "codes"]},
+  {"id": "appeals_power_wheelchair", "query": "What documentation is needed to appeal a Medicare denial for power wheelchair?", "expected_keywords": ["documentation", "appeal", "denial", "power wheelchair", "wheelchair"], "expected_sources": ["iom"]},
+  {"id": "rehab_coverage", "query": "Coverage for cardiac rehabilitation", "expected_keywords": ["cardiac", "rehab", "rehabilitation", "coverage"], "expected_sources": ["iom", "mcd"]}
 ]

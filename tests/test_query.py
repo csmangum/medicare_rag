@@ -122,3 +122,45 @@ def test_run_rag_returns_answer_and_source_docs() -> None:
     assert answer == "Cited answer."
     assert len(source_docs) == 1
     assert source_docs[0].metadata.get("source") == "mcd"
+
+
+def test_run_eval_returns_metrics_for_one_question(tmp_path: Path) -> None:
+    """Phase 5: retrieval eval path run_eval returns expected metrics structure."""
+    import importlib.util
+    import json
+
+    eval_file = tmp_path / "eval_one.json"
+    eval_file.write_text(
+        json.dumps([
+            {
+                "id": "part_b",
+                "query": "What does Medicare Part B cover?",
+                "expected_keywords": ["Part B", "outpatient"],
+                "expected_sources": ["iom"],
+            }
+        ]),
+        encoding="utf-8",
+    )
+    mock_retriever = MagicMock()
+    mock_retriever.invoke.return_value = [
+        Document(
+            page_content="Medicare Part B covers outpatient medical services.",
+            metadata={"doc_id": "iom_1", "chunk_index": 0, "source": "iom"},
+        ),
+    ]
+    script_path = Path(__file__).resolve().parent.parent / "scripts" / "validate_and_eval.py"
+    spec = importlib.util.spec_from_file_location("validate_and_eval", script_path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    with patch.object(mod, "_load_retriever", return_value=mock_retriever):
+        metrics = mod.run_eval(eval_file, k=5)
+
+    assert metrics["n_questions"] == 1
+    assert metrics["hit_rate"] == 1.0
+    assert metrics["mrr"] == 1.0
+    assert len(metrics["results"]) == 1
+    assert metrics["results"][0]["hit"] is True
+    assert metrics["results"][0]["first_hit_rank"] == 1
+    mock_retriever.invoke.assert_called_once()

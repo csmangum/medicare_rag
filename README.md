@@ -89,3 +89,37 @@ Generation uses a local Hugging Face model (no API key). Configure via env (see 
 - **`LOCAL_LLM_DEVICE`** — `auto` (default), `cpu`, or device map; use `cpu` on headless or when no GPU.
 - **`CUDA_VISIBLE_DEVICES`** — Override GPU visibility (e.g. `CUDA_VISIBLE_DEVICES=""` for CPU-only).
 - Optional: **`LOCAL_LLM_MAX_NEW_TOKENS`**, **`LOCAL_LLM_REPETITION_PENALTY`**.
+
+## Phase 5: Testing and validation
+
+### Unit tests
+
+Run the full test suite (download, ingest, index, query) in the project venv:
+
+```bash
+pytest tests/ -v
+```
+
+Tests live in `tests/test_download.py`, `tests/test_ingest.py`, `tests/test_index.py`, and `tests/test_query.py`.
+
+### Automated retrieval eval
+
+Run retrieval evaluation (hit rate and MRR) using the same retriever as the RAG chain and the question set in `scripts/eval_questions.json`:
+
+```bash
+python scripts/validate_and_eval.py              # validate index + run eval
+python scripts/validate_and_eval.py --eval-only -k 10
+python scripts/validate_and_eval.py --eval-only --json   # metrics as JSON
+```
+
+Edit `scripts/eval_questions.json` to add or change questions (each entry: `id`, `query`, `expected_keywords`, `expected_sources`).
+
+### Full-RAG eval (manual assessment)
+
+To assess end-to-end answer quality and citation accuracy, run the full RAG chain (retriever + LLM) on the eval set and generate a report:
+
+```bash
+python scripts/run_rag_eval.py [--eval-file scripts/eval_questions.json] [--out data/rag_eval_report.md] [-k 8]
+```
+
+The script writes a markdown report (default: `data/rag_eval_report.md`) with each question, the generated answer, and cited source metadata. Open the report and manually assess whether answers are accurate and citations correct.
