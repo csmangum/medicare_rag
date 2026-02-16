@@ -1,4 +1,5 @@
 """IOM (Internet-Only Manuals) download: 100-02, 100-03, 100-04 chapter PDFs."""
+
 import logging
 from pathlib import Path
 from urllib.parse import urljoin
@@ -36,7 +37,7 @@ def download_iom(raw_dir: Path, *, force: bool = False) -> None:
         if len(manual_links) < len(TARGET_MANUALS):
             found = set(manual_links)
             missing = set(TARGET_MANUALS) - found
-            logger.warning("Could not find manual links for: %s", missing)
+            raise RuntimeError(f"Could not find manual links for: {missing}")
 
         files_with_hashes: list[tuple[Path, str | None]] = []
 

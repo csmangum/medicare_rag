@@ -101,6 +101,8 @@ def test_iom_download_discovers_pdfs_and_writes_manifest(tmp_raw: Path) -> None:
     index_html = """
     <html><body>
     <a href="/regulations-and-guidance/guidance/manuals/internet-only-manuals-ioms-items/cms012673">100-02</a>
+    <a href="/regulations-and-guidance/guidance/manuals/internet-only-manuals-ioms-items/cms012674">100-03</a>
+    <a href="/regulations-and-guidance/guidance/manuals/internet-only-manuals-ioms-items/cms012675">100-04</a>
     </body></html>
     """
     manual_html = """
@@ -115,7 +117,7 @@ def test_iom_download_discovers_pdfs_and_writes_manifest(tmp_raw: Path) -> None:
     def fake_get(url, **kwargs):
         r = MagicMock()
         r.raise_for_status = MagicMock()
-        if "ioms-items" in url and "cms012673" in url:
+        if "ioms-items" in url:
             r.text = manual_html
             r.content = None
             return r

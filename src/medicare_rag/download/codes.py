@@ -1,4 +1,5 @@
 """Code files download: ICD-10-CM and HCPCS."""
+
 import logging
 import os
 from pathlib import Path
@@ -26,7 +27,11 @@ def _latest_hcpcs_zip_url(client: httpx.Client) -> str | None:
     # Look for links like "January 2026 Alpha-Numeric HCPCS File (ZIP)"
     for a in soup.find_all("a", href=True):
         text = (a.get_text() or "").strip()
-        if "alpha-numeric" in text.lower() and "hcpcs" in text.lower() and "zip" in text.lower():
+        if (
+            "alpha-numeric" in text.lower()
+            and "hcpcs" in text.lower()
+            and "zip" in text.lower()
+        ):
             return urljoin(HCPCS_QUARTERLY_URL, a["href"])
     return None
 
@@ -43,14 +48,18 @@ def download_codes(raw_dir: Path, *, force: bool = False) -> None:
         hcpcs_dir.mkdir(parents=True, exist_ok=True)
         zip_url = _latest_hcpcs_zip_url(client)
         if not zip_url:
-            logger.warning("Could not find latest HCPCS ZIP link on %s", HCPCS_QUARTERLY_URL)
+            raise RuntimeError(
+                f"Could not find latest HCPCS ZIP link on {HCPCS_QUARTERLY_URL}"
+            )
         else:
             name = sanitize_filename_from_url(zip_url, "hcpcs.zip")
             if not name.lower().endswith(".zip"):
                 name += ".zip"
             dest = hcpcs_dir / name
             if dest.exists() and not force:
-                logger.info("HCPCS file already exists: %s (use --force to re-download)", dest)
+                logger.info(
+                    "HCPCS file already exists: %s (use --force to re-download)", dest
+                )
                 try:
                     files_with_hashes.append((dest, file_sha256(dest)))
                 except OSError:
@@ -78,7 +87,10 @@ def download_codes(raw_dir: Path, *, force: bool = False) -> None:
                 name += ".zip"
             dest = icd_dir / name
             if dest.exists() and not force:
-                logger.info("ICD-10-CM file already exists: %s (use --force to re-download)", dest)
+                logger.info(
+                    "ICD-10-CM file already exists: %s (use --force to re-download)",
+                    dest,
+                )
                 try:
                     files_with_hashes.append((dest, file_sha256(dest)))
                 except OSError:

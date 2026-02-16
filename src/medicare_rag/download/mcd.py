@@ -1,5 +1,7 @@
 """MCD bulk data download: Download All Data ZIP."""
+
 import logging
+import shutil
 import zipfile
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -35,7 +37,10 @@ def download_mcd(raw_dir: Path, *, force: bool = False) -> None:
     manifest_path = out_dir / "manifest.json"
 
     if not force and manifest_path.exists():
-        logger.info("MCD manifest already exists at %s; skipping (use --force to re-download)", manifest_path)
+        logger.info(
+            "MCD manifest already exists at %s; skipping (use --force to re-download)",
+            manifest_path,
+        )
         return
 
     logger.info("Downloading %s", MCD_ALL_DATA_URL)
@@ -50,6 +55,11 @@ def download_mcd(raw_dir: Path, *, force: bool = False) -> None:
                             tmp.write(chunk)
                     tmp_path = Path(tmp.name)
 
+        if force and out_dir.exists():
+            logger.info(
+                "Clearing existing MCD directory for fresh extraction: %s", out_dir
+            )
+            shutil.rmtree(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(tmp_path, "r") as zf:
             names = _safe_extract_zip(zf, out_dir)
