@@ -5,7 +5,12 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
 
-from medicare_rag.config import LOCAL_LLM_MODEL
+from medicare_rag.config import (
+    LOCAL_LLM_DEVICE,
+    LOCAL_LLM_MAX_NEW_TOKENS,
+    LOCAL_LLM_MODEL,
+    LOCAL_LLM_REPETITION_PENALTY,
+)
 from medicare_rag.query.retriever import get_retriever
 
 SYSTEM_PROMPT = """You are a Medicare Revenue Cycle Management assistant. Answer the user's question using ONLY the provided context. Cite sources using [1], [2], etc. corresponding to the numbered context items. If the context is insufficient to answer, say so explicitly. This is not legal or medical advice."""
@@ -28,14 +33,24 @@ def _format_context(docs: list[Document]) -> str:
 
 
 def _create_llm() -> ChatHuggingFace:
-    """Create local chat model using Hugging Face pipeline (no API key)."""
+    """Create local chat model using Hugging Face pipeline (no API key).
+    Device placement via model_kwargs device_map to avoid conflicts with accelerate.
+    """
+    model_kwargs: dict = {}
+    if LOCAL_LLM_DEVICE == "auto":
+        model_kwargs["device_map"] = "auto"
+    elif LOCAL_LLM_DEVICE == "cpu":
+        model_kwargs["device_map"] = "cpu"
+    else:
+        model_kwargs["device_map"] = LOCAL_LLM_DEVICE
     llm = HuggingFacePipeline.from_model_id(
         model_id=LOCAL_LLM_MODEL,
         task="text-generation",
+        model_kwargs=model_kwargs,
         pipeline_kwargs=dict(
-            max_new_tokens=512,
+            max_new_tokens=LOCAL_LLM_MAX_NEW_TOKENS,
             do_sample=False,
-            repetition_penalty=1.05,
+            repetition_penalty=LOCAL_LLM_REPETITION_PENALTY,
         ),
     )
     return ChatHuggingFace(llm=llm)

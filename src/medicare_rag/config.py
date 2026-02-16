@@ -29,3 +29,8 @@ EMBEDDING_MODEL = os.environ.get(
 LOCAL_LLM_MODEL = os.environ.get(
     "LOCAL_LLM_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 )
+LOCAL_LLM_DEVICE = os.environ.get("LOCAL_LLM_DEVICE", "auto")
+LOCAL_LLM_MAX_NEW_TOKENS = int(os.environ.get("LOCAL_LLM_MAX_NEW_TOKENS", "512"))
+LOCAL_LLM_REPETITION_PENALTY = float(
+    os.environ.get("LOCAL_LLM_REPETITION_PENALTY", "1.05")
+)

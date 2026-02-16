@@ -28,7 +28,7 @@ flowchart LR
 - **Python 3.11+** with venv
 - **LangChain** -- orchestration, document loaders, text splitters, retrieval chain
 - **ChromaDB** -- local vector store, zero infrastructure
-- **OpenRouter API** (for generation: e.g. `openai/gpt-4o` or `anthropic/claude-3.5-sonnet`; single API key, model choice via config). **Embeddings:** OpenAI `text-embedding-3-small` or HuggingFace sentence-transformers for local/cost-free option.
+- **Local Hugging Face LLM** (for generation: e.g. TinyLlama via `LOCAL_LLM_MODEL`; no API key). **Embeddings:** sentence-transformers for local/cost-free option.
 - **pdfplumber** -- PDF text extraction (better table handling than PyMuPDF for CMS docs)
 - **Unstructured** -- fallback for complex/scanned PDFs
 - **httpx** -- async bulk downloads from CMS
@@ -60,7 +60,7 @@ medicare_rag/
       query/           # retrieval + generation
         retriever.py
         chain.py
-      config.py        # paths, model names, API keys: OPENROUTER_API_KEY, OPENAI_API_KEY (embeddings)
+      config.py        # paths, model names; embeddings and local LLM config (no API keys for generation)
   tests/
     test_download.py
     test_ingest.py
@@ -91,7 +91,7 @@ Each script should:
 
 ### 1c. Dependencies (`pyproject.toml`)
 
-Key deps: `langchain`, `langchain-openai` (for embeddings and/or OpenRouter-compatible chat via OpenAI client with base_url), `langchain-community`, `chromadb`, `pdfplumber`, `unstructured`, `httpx`, `python-dotenv`, `pytest`. Use OpenRouter base URL + API key for chat; model id is the provider path (e.g. `openai/gpt-4o`).
+Key deps: `langchain`, `langchain-huggingface`, `langchain-community`, `chromadb`, `transformers`, `accelerate`, `pdfplumber`, `unstructured`, `httpx`, `python-dotenv`, `pytest`. Generation uses a local Hugging Face pipeline (no API key). `transformers` and `accelerate` are required for the local LLM and are heavier than the rest of the stack; a future option is an extras install for LLM-heavy use.
 
 ---
 
@@ -134,9 +134,9 @@ Output: one text file per logical document (chapter, LCD, NCD, code section) in 
 
 ### 3a. Embedding (`src/medicare_rag/index/embed.py`)
 
-- Use `OpenAIEmbeddings(model="text-embedding-3-small")` (OpenAI) or `sentence-transformers` (HuggingFace) for cost-free iteration.
-- Batch embed chunks (OpenAI supports up to 2048 inputs per call).
-- Configurable via `config.py`: embedding model and API key (OpenAI for embeddings; OpenRouter is used for generation only).
+- Use `sentence-transformers` (HuggingFace) for cost-free local embeddings. (OpenAI embeddings are an optional alternative if you add `langchain-openai` and an API key.)
+- Batch embed chunks.
+- Configurable via `config.py`: embedding model; no API key needed for generation (local LLM).
 
 ### 3b. Vector store (`src/medicare_rag/index/store.py`)
 
@@ -172,7 +172,7 @@ Output: one text file per logical document (chapter, LCD, NCD, code section) in 
 - Build a `RetrievalQA` chain (or the newer LCEL equivalent) with:
   - A system prompt tailored for Medicare RCM (instructs the LLM to cite sources, use policy language, flag when info is insufficient).
   - The retriever from 4a.
-  - **OpenRouter** as the generation backend: use ChatOpenAI with `base_url="https://openrouter.ai/api/v1"` and `model` set from config (e.g. `openai/gpt-4o`, `anthropic/claude-3.5-sonnet`). API key: `OPENROUTER_API_KEY` from env.
+  - **Local Hugging Face LLM** as the generation backend: use `langchain-huggingface` (`HuggingFacePipeline.from_model_id`), model from `LOCAL_LLM_MODEL`, device from `LOCAL_LLM_DEVICE` (and optional `LOCAL_LLM_MAX_NEW_TOKENS`, `LOCAL_LLM_REPETITION_PENALTY` in env).
 - The prompt template should:
   - Identify the user's intent (coverage check, coding question, denial appeal, etc.).
   - Present retrieved chunks as numbered references.
@@ -196,6 +196,13 @@ Question: {question}
 
 - Simple REPL loop: accept a question, run the chain, print the answer with source citations.
 - Print metadata for each cited source (manual/chapter, LCD ID, etc.).
+- Optional readline and persistent history file (`~/.medicare_rag_query_history`) when available (Unix).
+
+### 4d. Local LLM configuration (env)
+
+- **`LOCAL_LLM_DEVICE`** — `auto` (default; let transformers/accelerate choose), `cpu`, or a device map value. Use `cpu` on headless or constrained environments to avoid loading CUDA.
+- **`LOCAL_LLM_MAX_NEW_TOKENS`**, **`LOCAL_LLM_REPETITION_PENALTY`** — Optional; defaults 512 and 1.05.
+- **`CUDA_VISIBLE_DEVICES`** — Override GPU visibility (e.g. `CUDA_VISIBLE_DEVICES=""` for CPU-only; `CUDA_VISIBLE_DEVICES=0` to select one GPU).
 
 ---
 
@@ -247,8 +254,8 @@ Run each through the query chain, manually assess answer quality and citation ac
 - **Phase 1b:** Implement download scripts for IOMs, MCD bulk data, and code files (ICD-10, HCPCS)
 - **Phase 2a:** Build PDF/CSV/XML text extraction pipeline with pdfplumber and beautifulsoup4
 - **Phase 2b:** Implement chunking with RecursiveCharacterTextSplitter and metadata attachment
-- **Phase 3:** Set up embeddings (OpenAI or HuggingFace) and ChromaDB persistent vector store with upsert logic
-- **Phase 4:** Build LangChain retrieval chain with OpenRouter for generation, Medicare-specific system prompt and citation format
+- **Phase 3:** Set up embeddings (HuggingFace sentence-transformers) and ChromaDB persistent vector store with upsert logic
+- **Phase 4:** Build LangChain retrieval chain with local Hugging Face LLM for generation, Medicare-specific system prompt and citation format
 - **Phase 4c:** Create CLI REPL for interactive querying
 - **Phase 5:** Write unit tests for download, ingest, and query modules
 - **Phase 6:** Add Streamlit/Gradio demo UI, conversation memory, and README documentation

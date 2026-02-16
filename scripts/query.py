@@ -8,9 +8,19 @@ Usage:
 
 import argparse
 import sys
+from pathlib import Path
 
 from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME
 from medicare_rag.query.chain import build_rag_chain
+
+try:
+    import readline
+
+    _HISTORY_PATH = Path.home() / ".medicare_rag_query_history"
+    _READLINE_AVAILABLE = True
+except ImportError:
+    _READLINE_AVAILABLE = False
+    _HISTORY_PATH = None
 
 
 SOURCE_META_KEYS = ("source", "manual", "chapter", "doc_id", "jurisdiction", "title")
@@ -68,12 +78,36 @@ def main() -> int:
         )
         return 1
 
+    if _READLINE_AVAILABLE and _HISTORY_PATH is not None:
+        try:
+            readline.read_history_file(_HISTORY_PATH)
+        except OSError:
+            pass
+        try:
+            readline.set_history_length(500)
+        except (AttributeError, TypeError):
+            pass
+
     print("Medicare RAG query (blank line to quit)")
     print("---")
 
     # Build the RAG chain once before the loop to avoid rebuilding on every question
     chain = build_rag_chain(k=args.k, metadata_filter=metadata_filter)
 
+    try:
+        _repl_loop(chain)
+    finally:
+        if _READLINE_AVAILABLE and _HISTORY_PATH is not None:
+            try:
+                readline.write_history_file(_HISTORY_PATH)
+            except OSError:
+                pass
+
+    print("Bye.")
+    return 0
+
+
+def _repl_loop(chain) -> None:
     while True:
         try:
             question = input("Question (blank to quit): ").strip()
@@ -100,9 +134,6 @@ def main() -> int:
                     parts.append(f"{key}={meta[key]}")
             print(" ".join(parts))
         print("---")
-
-    print("Bye.")
-    return 0
 
 
 if __name__ == "__main__":
