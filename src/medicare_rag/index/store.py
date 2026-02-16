@@ -10,6 +10,9 @@ if TYPE_CHECKING:
 
 from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME
 
+# Chroma client enforces a max batch size (~5461); stay under it
+CHROMA_UPSERT_BATCH_SIZE = 5000
+
 
 # Chroma allows str, int, float, bool in metadata
 def _sanitize_metadata(meta: dict) -> dict:
@@ -97,10 +100,12 @@ def upsert_documents(
         meta["content_hash"] = _content_hash(d)
         metadatas.append(_sanitize_metadata(meta))
 
-    collection.upsert(
-        ids=ids,
-        embeddings=vectors,
-        metadatas=metadatas,
-        documents=texts,
-    )
+    for i in range(0, len(to_upsert), CHROMA_UPSERT_BATCH_SIZE):
+        end = i + CHROMA_UPSERT_BATCH_SIZE
+        collection.upsert(
+            ids=ids[i:end],
+            embeddings=vectors[i:end],
+            metadatas=metadatas[i:end],
+            documents=texts[i:end],
+        )
     return len(to_upsert), skipped
