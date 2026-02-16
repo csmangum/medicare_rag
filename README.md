@@ -75,6 +75,26 @@ python scripts/validate_and_eval.py --eval-only --json   # metrics as JSON
 
 Validation checks that the Chroma collection exists, has documents, sample metadata (`doc_id`, `content_hash`), and that similarity search runs. Evaluation uses `scripts/eval_questions.json` (Medicare-focused queries with expected keywords/sources) and reports **hit rate** (fraction of queries with a relevant doc in top-k) and **MRR** (mean reciprocal rank). Add or edit entries in `eval_questions.json` to extend the eval set.
 
+### Embedding search UI
+
+A Streamlit-based UI (`app.py`) is available for interactive embedding search testing. To use it, install the optional `ui` dependency:
+
+```bash
+pip install -e ".[ui]"
+```
+
+Then launch the app:
+
+```bash
+streamlit run app.py
+```
+
+The UI provides:
+- Search bar with quick-check question buttons
+- Metadata filters (source, manual, jurisdiction)
+- Advanced options (top-k results, distance threshold, full content display)
+- Styled result cards with similarity scores and metadata
+
 ## Phase 4: Query (RAG with local LLM)
 
 Run the interactive query REPL (after ingestion):
