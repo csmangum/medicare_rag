@@ -49,3 +49,28 @@ pytest tests/ -v
 ```
 
 Phase 1 tests live in `tests/test_download.py` (mocked HTTP, idempotency).
+
+## Phase 3: Index (embed + vector store)
+
+After extraction and chunking, run the full ingest to embed and store chunks:
+
+```bash
+python scripts/ingest_all.py [--source iom|mcd|codes|all] [--force]
+```
+
+This runs extract → chunk → embed → store. Use `--skip-index` to only extract and chunk (no embedding or vector store). The vector store is persisted at `data/chroma/` with collection name `medicare_rag`. Updates are incremental by content hash; only new or changed chunks are re-embedded and upserted. Hash lookup uses a full-colpus load into memory, so for very large corpora you may need a different strategy (e.g. batch get by chunk ids or a side index).
+
+Chroma/embedding tests in `tests/test_index.py` are skipped when Chroma is unavailable (e.g. on Python 3.14+ with pydantic v1).
+
+### Validate and evaluate index
+
+After ingestion, validate the index and run retrieval evaluation:
+
+```bash
+python scripts/validate_and_eval.py              # validate + eval
+python scripts/validate_and_eval.py --validate-only
+python scripts/validate_and_eval.py --eval-only -k 10
+python scripts/validate_and_eval.py --eval-only --json   # metrics as JSON
+```
+
+Validation checks that the Chroma collection exists, has documents, sample metadata (`doc_id`, `content_hash`), and that similarity search runs. Evaluation uses `scripts/eval_questions.json` (Medicare-focused queries with expected keywords/sources) and reports **hit rate** (fraction of queries with a relevant doc in top-k) and **MRR** (mean reciprocal rank). Add or edit entries in `eval_questions.json` to extend the eval set.

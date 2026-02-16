@@ -145,6 +145,11 @@ Output: one text file per logical document (chapter, LCD, NCD, code section) in 
 - Upsert documents with their embeddings and metadata.
 - Support incremental updates (check document hash before re-embedding).
 
+**Notes:**
+
+- Incremental indexing: only new or changed chunks (by `content_hash`) are embedded and upserted.
+- Hash lookup currently uses a full-collection `get()`; for very large indices, consider batch get by chunk ids or a side index.
+
 ### 3c. CLI (`scripts/ingest_all.py`)
 
 - Orchestrates: extract -> chunk -> embed -> store.

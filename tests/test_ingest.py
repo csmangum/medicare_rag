@@ -375,7 +375,7 @@ def test_ingest_all_skip_extract_exits_zero(tmp_path: Path, capsys: pytest.Captu
         module = importlib.util.module_from_spec(spec)
         sys.modules["ingest_all"] = module
         spec.loader.exec_module(module)
-        with patch("sys.argv", ["ingest_all.py", "--skip-extract"]):
+        with patch("sys.argv", ["ingest_all.py", "--skip-extract", "--skip-index"]):
             exit_code = module.main()
     assert exit_code == 0
     out = capsys.readouterr()
