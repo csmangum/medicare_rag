@@ -9,31 +9,38 @@ description = "Medicare RAG POC: RAG system for Medicare RCM questions"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "beautifulsoup4",
-    "chromadb",
-    "httpx",
-    "langchain-chroma",
-    "langchain-community",
-    "langchain-core",
-    "langchain-huggingface",
-    "langchain-text-splitters",
-    "transformers",
-    "accelerate",
-    "pdfplumber",
-    "python-dotenv",
-    "pytest",
-    "sentence-transformers",
+    "beautifulsoup4>=4.12",
+    "chromadb>=1.0,<2",
+    "defusedxml>=0.7",
+    "httpx>=0.24",
+    "langchain-chroma>=1.0,<2",
+    "langchain-community>=0.2",
+    "langchain-core>=1.0,<2",
+    "langchain-huggingface>=0.1",
+    "langchain-text-splitters>=0.2",
+    "transformers>=4.40",
+    "accelerate>=0.20",
+    "pdfplumber>=0.10",
+    "python-dotenv>=1.0",
+    "sentence-transformers>=3.0",
 ]
 
 [project.optional-dependencies]
 ui = ["streamlit>=1.28.0"]
-dev = ["ruff"]
+dev = ["ruff", "pytest"]
 # Optional: enables PDF fallback for scanned/image PDFs when pdfplumber yields little text.
 # Without it, those PDFs may yield empty or short extractions.
 unstructured = ["unstructured"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

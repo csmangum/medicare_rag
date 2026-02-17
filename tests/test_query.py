@@ -3,7 +3,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from langchain_core.documents import Document
 
 from medicare_rag.index import get_embeddings, get_or_create_chroma

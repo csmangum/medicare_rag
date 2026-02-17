@@ -9,7 +9,11 @@ import httpx
 from bs4 import BeautifulSoup
 
 from medicare_rag.download._manifest import file_sha256, write_manifest
-from medicare_rag.download._utils import DOWNLOAD_TIMEOUT, sanitize_filename_from_url
+from medicare_rag.download._utils import (
+    DOWNLOAD_TIMEOUT,
+    sanitize_filename_from_url,
+    stream_download,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +70,7 @@ def download_codes(raw_dir: Path, *, force: bool = False) -> None:
                 files_with_hashes.append((dest, None))
         else:
             logger.info("Downloading HCPCS %s -> %s", zip_url, dest)
-            with client.stream("GET", zip_url) as r:
-                r.raise_for_status()
-                with dest.open("wb") as f:
-                    for chunk in r.iter_bytes():
-                        if chunk:
-                            f.write(chunk)
+            stream_download(client, zip_url, dest)
             try:
                 files_with_hashes.append((dest, file_sha256(dest)))
             except OSError:
@@ -98,12 +97,7 @@ def download_codes(raw_dir: Path, *, force: bool = False) -> None:
                     files_with_hashes.append((dest, None))
             else:
                 logger.info("Downloading ICD-10-CM %s -> %s", icd_url, dest)
-                with client.stream("GET", icd_url) as r:
-                    r.raise_for_status()
-                    with dest.open("wb") as f:
-                        for chunk in r.iter_bytes():
-                            if chunk:
-                                f.write(chunk)
+                stream_download(client, icd_url, dest)
                 try:
                     files_with_hashes.append((dest, file_sha256(dest)))
                 except OSError:

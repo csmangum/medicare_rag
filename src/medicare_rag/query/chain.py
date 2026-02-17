@@ -1,5 +1,7 @@
 """RAG chain with local Hugging Face LLM (Phase 4)."""
-from typing import Any, Callable
+import functools
+from collections.abc import Callable
+from typing import Any
 
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
@@ -32,9 +34,11 @@ def _format_context(docs: list[Document]) -> str:
     )
 
 
+@functools.lru_cache(maxsize=1)
 def _create_llm() -> ChatHuggingFace:
     """Create local chat model using Hugging Face pipeline (no API key).
     Device placement via model_kwargs device_map to avoid conflicts with accelerate.
+    Cached so the model is loaded once per process.
     """
     model_kwargs: dict = {}
     if LOCAL_LLM_DEVICE == "auto":

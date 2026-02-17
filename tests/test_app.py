@@ -20,10 +20,11 @@ class TestEscape:
         assert app._escape('say "hi"') == "say &quot;hi&quot;"
 
     def test_escapes_single_quote(self) -> None:
-        assert app._escape("it's") == "it&#39;s"
+        # html.escape(quote=True) uses &#x27; for apostrophe
+        assert app._escape("it's") == "it&#x27;s"
 
     def test_escapes_multiple(self) -> None:
-        assert app._escape('& < " \'') == "&amp; &lt; &quot; &#39;"
+        assert app._escape('& < " \'') == "&amp; &lt; &quot; &#x27;"
 
 
 class TestBuildMetadataFilter:

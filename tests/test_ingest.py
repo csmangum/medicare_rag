@@ -23,7 +23,6 @@ from medicare_rag.ingest.extract import (
     extract_mcd,
 )
 
-
 # --- Extraction helpers ---
 
 

@@ -11,16 +11,17 @@ Medicare RAG POC — a Retrieval-Augmented Generation system for Medicare Revenu
 
 ```
 src/medicare_rag/           # Main package (installed as editable via `pip install -e .`)
-  config.py                 # Paths, env config (DATA_DIR, model settings); loads .env
+  config.py                 # Paths, env config (DATA_DIR, models, batch sizes, chunking); safe int/float parsing; loads .env
   download/                 # Phase 1: download IOM manuals, MCD bulk data, HCPCS/ICD codes
     iom.py                  #   IOM chapter PDF scraper
     mcd.py                  #   MCD bulk ZIP downloader
     codes.py                #   HCPCS + ICD-10-CM code file downloader
     _manifest.py            #   Manifest writing and SHA-256 hashing
-    _utils.py               #   URL sanitization helpers
+    _utils.py               #   URL sanitization, stream_download helper, DOWNLOAD_TIMEOUT (from config)
   ingest/                   # Phase 2: text extraction and chunking
-    extract.py              #   PDF/text extraction (pdfplumber, optional unstructured fallback)
-    chunk.py                #   LangChain text splitters
+    __init__.py             #   SourceKind type (imported by extract, chunk)
+    extract.py              #   PDF/text extraction (pdfplumber, optional unstructured fallback); defusedxml for XML when available
+    chunk.py                #   LangChain text splitters (uses CHUNK_SIZE, CHUNK_OVERLAP from config)
   index/                    # Phase 3: embedding and vector store
     embed.py                #   sentence-transformers embeddings
     store.py                #   ChromaDB upsert, incremental by content hash
@@ -34,12 +35,14 @@ scripts/                    # CLI entry points
   query.py                  #   Interactive RAG REPL
   run_rag_eval.py           #   Full-RAG eval report generation
   eval_questions.json       #   Eval question set (expected keywords/sources)
-tests/                      # Unit tests (pytest)
-  test_download.py          #   Mocked HTTP, idempotency, zip-slip protection
+tests/                      # Unit tests (pytest; install with pip install -e ".[dev]")
+  test_config.py            #   Safe env int/float parsing
+  test_download.py          #   Mocked HTTP, idempotency, zip-slip and URL sanitization
   test_ingest.py            #   Extraction and chunking tests
-  test_index.py             #   Chroma/embedding tests (skipped when Chroma unavailable)
+  test_index.py             #   Chroma/embedding and get_raw_collection tests (skipped when Chroma unavailable)
   test_query.py             #   Retriever and chain tests
   test_search_validation.py #   Search/validation tests
+  test_app.py               #   Streamlit app helpers (escape, filters; requires .[ui])
 data/                       # Runtime data directory (gitignored)
   raw/                      #   Downloaded source files
   processed/                #   Extracted/chunked text
@@ -61,9 +64,10 @@ data/                       # Runtime data directory (gitignored)
 
 ## Running Tests
 
-Always use a virtual environment. Run the full test suite with:
+Always use a virtual environment. Install the dev optional dependency (includes pytest), then run:
 
 ```bash
+pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
@@ -78,7 +82,7 @@ Tests use `unittest.mock` to mock HTTP calls and external dependencies. No netwo
 
 ## Key Conventions
 
-- **Configuration** is centralized in `src/medicare_rag/config.py`. It reads from environment variables (via `python-dotenv`) with sensible defaults. Override paths with `DATA_DIR`, model settings with `EMBEDDING_MODEL`, `LOCAL_LLM_MODEL`, etc.
+- **Configuration** is centralized in `src/medicare_rag/config.py`. It reads from environment variables (via `python-dotenv`) with sensible defaults. Numeric settings (e.g. `LOCAL_LLM_MAX_NEW_TOKENS`, `CHUNK_SIZE`) use safe parsing: invalid values log a warning and fall back to the default. Override paths with `DATA_DIR`, model settings with `EMBEDDING_MODEL`, `LOCAL_LLM_MODEL`; tuning with `DOWNLOAD_TIMEOUT`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `CHROMA_UPSERT_BATCH_SIZE`, `GET_META_BATCH_SIZE`.
 - **Idempotent operations**: downloads check for existing manifests/files before re-downloading. Index upserts are incremental by content hash. Use `--force` to override.
 - **Manifests**: each download source writes a `manifest.json` with source URL, download date, and file list (with optional SHA-256 hashes).
 - **No API keys**: the system uses local sentence-transformers for embeddings and a local HuggingFace model (default: TinyLlama) for generation. No external API calls for inference.
@@ -91,4 +95,4 @@ Tests use `unittest.mock` to mock HTTP calls and external dependencies. No netwo
 - Embedding model default: `sentence-transformers/all-MiniLM-L6-v2`
 - LLM default: `TinyLlama/TinyLlama-1.1B-Chat-v1.0` (configurable via env)
 - Tests follow the pattern: fixture creates `tmp_path`, mocks are applied via `unittest.mock.patch`, assertions verify file creation and manifest contents
-- The Streamlit app (`app.py`) uses the Chroma wrapper's `_collection` for batched metadata and dimension checks; this is a private API and may need updating if langchain-chroma changes.
+- The Streamlit app and index store use `get_raw_collection(store)` from `index.store` to access the Chroma wrapper's underlying collection for batched metadata and dimension checks; this wraps the private `_collection` API and may need updating if langchain-chroma changes.

@@ -148,7 +148,7 @@ def main() -> int:
             meta_str = _format_source_meta(doc.metadata)
             lines.append(f"- **[{j}]** {meta_str}")
             snippet = (doc.page_content or "")[:200].replace("\n", " ")
-            if len((doc.page_content or "")) > 200:
+            if len(doc.page_content or "") > 200:
                 snippet += "..."
             lines.append(f"  - {snippet}")
             lines.append("")

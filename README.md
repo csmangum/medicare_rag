@@ -108,15 +108,23 @@ Copy `.env.example` to `.env` and override as needed:
 | `EMBEDDING_MODEL` | sentence-transformers model (default: `all-MiniLM-L6-v2`). Changing it changes vector dimension; re-ingest or match the model used at index time. |
 | `LOCAL_LLM_MODEL` | Hugging Face model (default: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`) |
 | `LOCAL_LLM_DEVICE` | `auto`, `cpu`, or device map |
+| `LOCAL_LLM_MAX_NEW_TOKENS` | Max tokens generated (default: 512). Invalid values fall back to default with a warning. |
+| `LOCAL_LLM_REPETITION_PENALTY` | Repetition penalty (default: 1.05). Invalid values fall back to default with a warning. |
 | `ICD10_CM_ZIP_URL` | Optional; for ICD-10-CM code download |
+| `DOWNLOAD_TIMEOUT` | HTTP timeout in seconds for downloads (default: 60) |
+| `CHUNK_SIZE`, `CHUNK_OVERLAP` | Text splitter defaults (1000 and 200). Optional tuning. |
 
 ## Testing
 
+Install the dev optional dependency (includes pytest and ruff), then run:
+
 ```bash
+pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-- **Download:** `tests/test_download.py` — mocked HTTP, idempotency, zip-slip safety.
+- **Config:** `tests/test_config.py` — safe env var parsing for numeric settings.
+- **Download:** `tests/test_download.py` — mocked HTTP, idempotency, zip-slip and URL sanitization.
 - **Ingest:** `tests/test_ingest.py` — extraction and chunking.
 - **Index:** `tests/test_index.py` — Chroma and embeddings (skipped when Chroma unavailable, e.g. some Python 3.14+ setups).
 - **Query:** `tests/test_query.py` — retriever and RAG chain.
@@ -128,7 +136,7 @@ No network or real downloads needed for the core suite; mocks are used for HTTP 
 ## Optional extras
 
 - **`pip install -e ".[ui]"`** — Streamlit for the embedding search UI.
-- **`pip install -e ".[dev]"`** — ruff for linting/formatting.
+- **`pip install -e ".[dev]"`** — pytest (test suite) and ruff (linting/formatting). Required to run tests.
 - **`pip install -e ".[unstructured]"`** — Fallback extractor for image-heavy PDFs when pdfplumber yields little text.
 
 ## Project layout
