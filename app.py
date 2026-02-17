@@ -56,23 +56,26 @@ def _get_collection_meta(_store) -> dict[str, Any]:
                 to exclude this parameter from the cache key (only TTL-based invalidation).
     """
     collection = _store._collection
-    count = collection.count()
-    if count == 0:
+    if collection.count() == 0:
         return {"count": 0, "sources": [], "manuals": [], "jurisdictions": []}
 
     sources: set[str] = set()
     manuals: set[str] = set()
     jurisdictions: set[str] = set()
+    total_seen = 0
 
     offset = 0
-    while offset < count:
+    while True:
         batch = collection.get(
             include=["metadatas"],
             limit=_META_BATCH_SIZE,
             offset=offset,
         )
         metadatas = batch.get("metadatas") or []
+        if not metadatas:
+            break
         offset += len(metadatas)
+        total_seen += len(metadatas)
         for m in metadatas:
             if not m:
                 continue
@@ -84,7 +87,7 @@ def _get_collection_meta(_store) -> dict[str, Any]:
                 jurisdictions.add(str(m["jurisdiction"]))
 
     return {
-        "count": count,
+        "count": total_seen,
         "sources": sorted(sources),
         "manuals": sorted(manuals),
         "jurisdictions": sorted(jurisdictions),
