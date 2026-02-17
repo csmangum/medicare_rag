@@ -189,7 +189,8 @@
     "difficulty": "medium",
     "expected_keywords": ["diabetes", "foot", "ulcer"],
     "expected_sources": ["codes"],
-    "description": "ICD-10-CM code for diabetic foot ulcer"
+    "description": "ICD-10-CM code for diabetic foot ulcer",
+    "data_dependency": "Requires ICD10_CM_ZIP_URL to be set for ICD-10-CM data download"
   },
   {
     "id": "icd10_hypertension",
@@ -198,7 +199,8 @@
     "difficulty": "easy",
     "expected_keywords": ["hypertension"],
     "expected_sources": ["codes"],
-    "description": "ICD-10-CM hypertension code"
+    "description": "ICD-10-CM hypertension code",
+    "data_dependency": "Requires ICD10_CM_ZIP_URL to be set for ICD-10-CM data download"
   },
   {
     "id": "icd10_chest_pain",
@@ -207,7 +209,8 @@
     "difficulty": "easy",
     "expected_keywords": ["chest pain"],
     "expected_sources": ["codes"],
-    "description": "ICD-10-CM chest pain code"
+    "description": "ICD-10-CM chest pain code",
+    "data_dependency": "Requires ICD10_CM_ZIP_URL to be set for ICD-10-CM data download"
   },
   {
     "id": "icd10_copd",
@@ -216,7 +219,8 @@
     "difficulty": "medium",
     "expected_keywords": ["obstructive", "pulmonary"],
     "expected_sources": ["codes"],
-    "description": "COPD diagnosis codes"
+    "description": "COPD diagnosis codes",
+    "data_dependency": "Requires ICD10_CM_ZIP_URL to be set for ICD-10-CM data download"
   },
 
   {

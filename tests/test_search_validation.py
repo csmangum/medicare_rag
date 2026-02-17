@@ -2,14 +2,15 @@
 
 Tests cover:
   - DCG/NDCG computation
+  - Keyword fraction scoring
   - Relevance scoring (_question_relevance)
-  - Per-question evaluation (_evaluate_question)
+  - Per-question evaluation (_evaluate_question) including recall
   - Consistency scoring (_compute_consistency)
   - Full run_eval with mocked retriever (various scenarios)
-  - Validation checks (validate_index)
-  - Category/difficulty/source breakdowns
   - Multi-k sweep
-  - Report formatting
+  - Duplicate question ID detection
+  - Validation checks (validate_index)
+  - Report formatting (text and markdown)
 """
 import importlib.util
 import json
@@ -84,6 +85,32 @@ class TestDCGAndNDCG:
 
 
 # ---------------------------------------------------------------------------
+# Keyword fraction tests
+# ---------------------------------------------------------------------------
+
+class TestKeywordFraction:
+
+    def test_no_keywords(self, mod):
+        assert mod._keyword_fraction("anything", []) == 1.0
+
+    def test_all_keywords_present(self, mod):
+        assert mod._keyword_fraction("Part B outpatient coverage", ["Part B", "outpatient"]) == 1.0
+
+    def test_some_keywords_present(self, mod):
+        assert mod._keyword_fraction("Part B details", ["Part B", "outpatient"]) == pytest.approx(0.5)
+
+    def test_no_keywords_present(self, mod):
+        assert mod._keyword_fraction("Unrelated text", ["Part B", "outpatient"]) == 0.0
+
+    def test_case_insensitive(self, mod):
+        assert mod._keyword_fraction("PART B OUTPATIENT", ["part b", "outpatient"]) == 1.0
+
+    def test_single_keyword_of_four(self, mod):
+        result = mod._keyword_fraction("coverage details here", ["Part B", "outpatient", "medical", "coverage"])
+        assert result == pytest.approx(0.25)
+
+
+# ---------------------------------------------------------------------------
 # Relevance scoring tests
 # ---------------------------------------------------------------------------
 
@@ -95,39 +122,45 @@ class TestQuestionRelevance:
     def test_full_match_keyword_and_source(self, mod):
         docs = [self._make_doc("Medicare Part B outpatient coverage", "iom")]
         rels = mod._question_relevance(docs, ["Part B", "outpatient"], ["iom"])
-        assert rels == [1.0]
+        # kw=1.0*0.6 + source=1.0*0.4 = 1.0
+        assert rels == [pytest.approx(1.0)]
 
     def test_keyword_match_wrong_source(self, mod):
         docs = [self._make_doc("Medicare Part B outpatient coverage", "codes")]
         rels = mod._question_relevance(docs, ["Part B"], ["iom"])
-        assert rels == [0.5]
+        # kw=1.0*0.6 + source=0.0*0.4 = 0.6
+        assert rels == [pytest.approx(0.6)]
 
     def test_source_match_wrong_keyword(self, mod):
         docs = [self._make_doc("Unrelated text about something else", "iom")]
         rels = mod._question_relevance(docs, ["Part B"], ["iom"])
-        assert rels == [0.5]
+        # kw=0.0*0.6 + source=1.0*0.4 = 0.4
+        assert rels == [pytest.approx(0.4)]
 
     def test_no_match(self, mod):
         docs = [self._make_doc("Completely unrelated content", "codes")]
         rels = mod._question_relevance(docs, ["Part B"], ["iom"])
-        assert rels == [0.0]
+        # kw=0.0*0.6 + source=0.0*0.4 = 0.0
+        assert rels == [pytest.approx(0.0)]
 
     def test_no_expected_keywords(self, mod):
-        # No keyword constraint -> keyword always matches
+        # No keyword constraint -> keyword fraction = 1.0
         docs = [self._make_doc("Anything", "iom")]
         rels = mod._question_relevance(docs, None, ["iom"])
-        assert rels == [1.0]
+        # kw=1.0*0.6 + source=1.0*0.4 = 1.0
+        assert rels == [pytest.approx(1.0)]
 
     def test_no_expected_sources(self, mod):
-        # No source constraint -> source always matches
+        # No source constraint -> source = 1.0
         docs = [self._make_doc("Part B coverage", "codes")]
         rels = mod._question_relevance(docs, ["Part B"], None)
-        assert rels == [1.0]
+        # kw=1.0*0.6 + source=1.0*0.4 = 1.0
+        assert rels == [pytest.approx(1.0)]
 
     def test_no_constraints(self, mod):
         docs = [self._make_doc("Anything", "anything")]
         rels = mod._question_relevance(docs, None, None)
-        assert rels == [1.0]
+        assert rels == [pytest.approx(1.0)]
 
     def test_multiple_docs_mixed(self, mod):
         docs = [
@@ -137,12 +170,19 @@ class TestQuestionRelevance:
             self._make_doc("Random text", "codes"),          # no match
         ]
         rels = mod._question_relevance(docs, ["Part B"], ["iom"])
-        assert rels == [1.0, 0.5, 0.5, 0.0]
+        assert rels == [pytest.approx(1.0), pytest.approx(0.6), pytest.approx(0.4), pytest.approx(0.0)]
 
     def test_keyword_case_insensitive(self, mod):
         docs = [self._make_doc("MEDICARE PART B COVERAGE", "iom")]
         rels = mod._question_relevance(docs, ["part b"], ["iom"])
-        assert rels == [1.0]
+        assert rels == [pytest.approx(1.0)]
+
+    def test_partial_keyword_match(self, mod):
+        """A doc matching 1 of 4 keywords should score lower than one matching all 4."""
+        docs = [self._make_doc("coverage details", "iom")]
+        rels = mod._question_relevance(docs, ["Part B", "outpatient", "medical", "coverage"], ["iom"])
+        # kw=0.25*0.6 + source=1.0*0.4 = 0.55
+        assert rels == [pytest.approx(0.55)]
 
     def test_empty_docs(self, mod):
         rels = mod._question_relevance([], ["Part B"], ["iom"])
@@ -165,6 +205,7 @@ class TestEvaluateQuestion:
         assert result["first_hit_rank"] == 1
         assert result["reciprocal_rank"] == 1.0
         assert result["precision_at_k"] == pytest.approx(1.0 / 5)
+        assert result["recall_at_k"] == pytest.approx(1.0)  # iom found
         assert result["ndcg_at_k"] > 0
         assert result["fully_relevant"] == 1
 
@@ -175,6 +216,7 @@ class TestEvaluateQuestion:
         assert result["first_hit_rank"] is None
         assert result["reciprocal_rank"] == 0.0
         assert result["precision_at_k"] == 0.0
+        assert result["recall_at_k"] == 0.0
         assert result["fully_relevant"] == 0
 
     def test_hit_at_rank_3(self, mod):
@@ -198,6 +240,21 @@ class TestEvaluateQuestion:
         assert result["fully_relevant"] == 2
         assert result["precision_at_k"] == pytest.approx(2.0 / 5)
 
+    def test_recall_partial_sources(self, mod):
+        """When expecting iom+mcd but only iom retrieved, recall = 0.5."""
+        docs = [self._make_doc("Part B coverage details", "iom")]
+        result = mod._evaluate_question(docs, ["Part B"], ["iom", "mcd"], k=5)
+        assert result["recall_at_k"] == pytest.approx(0.5)
+
+    def test_recall_all_sources(self, mod):
+        """When both expected sources are retrieved, recall = 1.0."""
+        docs = [
+            self._make_doc("Part B coverage", "iom"),
+            self._make_doc("Part B coverage MCD", "mcd"),
+        ]
+        result = mod._evaluate_question(docs, ["Part B"], ["iom", "mcd"], k=5)
+        assert result["recall_at_k"] == pytest.approx(1.0)
+
     def test_source_diversity(self, mod):
         docs = [
             self._make_doc("Content", "iom", "doc1"),
@@ -211,6 +268,7 @@ class TestEvaluateQuestion:
         result = mod._evaluate_question([], ["Part B"], ["iom"], k=5)
         assert result["hit"] is False
         assert result["precision_at_k"] == 0.0
+        assert result["recall_at_k"] == 0.0
         assert result["ndcg_at_k"] == 0.0
 
 
@@ -365,8 +423,9 @@ class TestRunEval:
             },
         ])
         mock_retriever = MagicMock()
-        # One invoke per question; results are cached and reused for multi-k sweep.
+        # First call is warmup, then one invoke per question.
         mock_retriever.invoke.side_effect = [
+            [],  # warmup
             [self._make_doc("Part B outpatient", "iom")],
             [self._make_doc("Unrelated", "codes")],
         ]
@@ -398,8 +457,9 @@ class TestRunEval:
             },
         ])
         mock_retriever = MagicMock()
-        # One invoke per question; results are cached for multi-k sweep.
+        # First call is warmup, then one invoke per question.
         mock_retriever.invoke.side_effect = [
+            [],  # warmup
             [self._make_doc("Part B text", "iom")],
             [self._make_doc("HCPCS code A1234", "codes", "code_1")],
         ]
@@ -431,8 +491,9 @@ class TestRunEval:
             },
         ])
         mock_retriever = MagicMock()
-        # One invoke per question; results are cached for multi-k sweep.
+        # First call is warmup, then one invoke per question.
         mock_retriever.invoke.side_effect = [
+            [],  # warmup
             [self._make_doc("Part B coverage", "iom")],
             [self._make_doc("Unrelated", "codes")],
         ]
@@ -677,19 +738,20 @@ class TestReportFormatting:
             "hits": 1,
             "mrr": 0.5,
             "avg_precision_at_k": 0.1,
+            "avg_recall_at_k": 0.5,
             "avg_ndcg_at_k": 0.3,
             "latency": {
                 "min_ms": 10, "max_ms": 50, "median_ms": 25,
                 "mean_ms": 30, "p95_ms": 48, "p99_ms": 50,
             },
             "by_category": {
-                "policy": {"n": 1, "hit_rate": 1.0, "mrr": 1.0, "avg_precision_at_k": 0.2, "avg_ndcg_at_k": 0.5},
+                "policy": {"n": 1, "hit_rate": 1.0, "mrr": 1.0, "avg_precision_at_k": 0.2, "avg_recall_at_k": 0.5, "avg_ndcg_at_k": 0.5},
             },
             "by_difficulty": {
-                "easy": {"n": 1, "hit_rate": 1.0, "mrr": 1.0, "avg_precision_at_k": 0.2, "avg_ndcg_at_k": 0.5},
+                "easy": {"n": 1, "hit_rate": 1.0, "mrr": 1.0, "avg_precision_at_k": 0.2, "avg_recall_at_k": 0.5, "avg_ndcg_at_k": 0.5},
             },
             "by_expected_source": {
-                "iom": {"n": 1, "hit_rate": 1.0, "mrr": 1.0, "avg_precision_at_k": 0.2, "avg_ndcg_at_k": 0.5},
+                "iom": {"n": 1, "hit_rate": 1.0, "mrr": 1.0, "avg_precision_at_k": 0.2, "avg_recall_at_k": 0.5, "avg_ndcg_at_k": 0.5},
             },
             "consistency": {"avg_score": 0.8, "groups": {}},
             "multi_k": None,
@@ -697,7 +759,8 @@ class TestReportFormatting:
                 {
                     "id": "q1", "query": "test", "category": "policy", "difficulty": "easy",
                     "latency_ms": 25.0, "hit": True, "first_hit_rank": 1,
-                    "reciprocal_rank": 1.0, "precision_at_k": 0.2, "ndcg_at_k": 0.5,
+                    "reciprocal_rank": 1.0, "precision_at_k": 0.2, "recall_at_k": 0.5,
+                    "ndcg_at_k": 0.5,
                     "fully_relevant": 1, "partially_relevant": 0, "sources_in_topk": ["iom"],
                 },
             ],
@@ -801,3 +864,160 @@ class TestEvalQuestionsSchema:
 
         for group, count in groups.items():
             assert count >= 2, f"Consistency group '{group}' has only {count} question(s)"
+
+
+# ---------------------------------------------------------------------------
+# Multi-k sweep test
+# ---------------------------------------------------------------------------
+
+class TestMultiKSweep:
+
+    def _write_eval_file(self, tmp_path: Path, questions: list) -> Path:
+        eval_file = tmp_path / "eval.json"
+        eval_file.write_text(json.dumps(questions), encoding="utf-8")
+        return eval_file
+
+    def _make_doc(self, content: str, source: str = "iom", doc_id: str = "test") -> Document:
+        return Document(page_content=content, metadata={"source": source, "doc_id": doc_id})
+
+    def test_multi_k_sweep_produces_metrics(self, mod, tmp_path):
+        eval_file = self._write_eval_file(tmp_path, [
+            {
+                "id": "q1",
+                "query": "Part B coverage",
+                "expected_keywords": ["Part B"],
+                "expected_sources": ["iom"],
+            }
+        ])
+        mock_retriever = MagicMock()
+        mock_retriever.invoke.return_value = [
+            self._make_doc("Part B outpatient info", "iom", "d1"),
+            self._make_doc("Part B billing", "iom", "d2"),
+            self._make_doc("Unrelated", "codes", "d3"),
+        ]
+
+        with patch.object(mod, "_load_retriever", return_value=mock_retriever):
+            metrics = mod.run_eval(eval_file, k=3, k_values=[1, 3])
+
+        assert metrics["multi_k"] is not None
+        assert 1 in metrics["multi_k"]
+        assert 3 in metrics["multi_k"]
+        # k=1 should have 1 hit (first doc is relevant), k=3 also
+        assert metrics["multi_k"][1]["hit_rate"] == 1.0
+        assert metrics["multi_k"][3]["hit_rate"] == 1.0
+        # Precision should differ: 1/1=1.0 at k=1, 2/3 at k=3
+        assert metrics["multi_k"][1]["avg_precision_at_k"] >= metrics["multi_k"][3]["avg_precision_at_k"]
+        # Recall should be present
+        assert "avg_recall_at_k" in metrics["multi_k"][1]
+
+
+# ---------------------------------------------------------------------------
+# Duplicate question ID detection test
+# ---------------------------------------------------------------------------
+
+class TestDuplicateQuestionIdDetection:
+
+    def test_duplicate_ids_return_error(self, mod, tmp_path):
+        eval_file = tmp_path / "dup.json"
+        eval_file.write_text(json.dumps([
+            {"id": "same_id", "query": "Q1", "expected_keywords": ["test"]},
+            {"id": "same_id", "query": "Q2", "expected_keywords": ["test"]},
+        ]), encoding="utf-8")
+
+        with patch.object(mod, "_load_retriever", return_value=MagicMock()):
+            metrics = mod.run_eval(eval_file, k=5)
+
+        assert metrics.get("error") == "duplicate_question_ids"
+        assert metrics["n_questions"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Markdown report builder test
+# ---------------------------------------------------------------------------
+
+class TestMarkdownReportBuilder:
+
+    def test_build_markdown_report_validation_only(self, mod):
+        validation = {
+            "passed": True,
+            "checks": [{"name": "test", "passed": True, "detail": "ok"}],
+            "stats": {
+                "checks_passed": 1,
+                "checks_total": 1,
+                "total_documents": 100,
+                "source_distribution": {"iom": 60, "mcd": 30, "codes": 10},
+                "content_length": {"min": 5, "max": 4000, "median": 500, "mean": 600, "p5": 50, "p95": 2000},
+                "embedding_dimension": 384,
+            },
+            "warnings": [],
+        }
+        md = mod._build_markdown_report(validation, None, k=5)
+        assert "## Index Validation" in md
+        assert "PASSED" in md
+        assert "384" in md
+
+    def test_build_markdown_report_eval_only(self, mod):
+        metrics = {
+            "n_questions": 2,
+            "k": 5,
+            "hit_rate": 0.5,
+            "hits": 1,
+            "mrr": 0.5,
+            "avg_precision_at_k": 0.2,
+            "avg_recall_at_k": 0.5,
+            "avg_ndcg_at_k": 0.4,
+            "latency": {"min_ms": 5, "max_ms": 20, "median_ms": 10, "mean_ms": 12, "p95_ms": 18, "p99_ms": 20},
+            "by_category": {},
+            "by_difficulty": {},
+            "by_expected_source": {},
+            "consistency": {"avg_score": None, "groups": {}},
+            "multi_k": None,
+            "results": [
+                {
+                    "id": "q1", "hit": True, "first_hit_rank": 1, "precision_at_k": 0.2,
+                    "recall_at_k": 1.0, "ndcg_at_k": 0.5, "category": "test", "difficulty": "easy",
+                },
+            ],
+        }
+        md = mod._build_markdown_report(None, metrics, k=5)
+        assert "## Retrieval Evaluation" in md
+        assert "Recall" in md
+        assert "Hit rate" in md
+
+    def test_build_markdown_report_both(self, mod):
+        validation = {
+            "passed": False,
+            "checks": [
+                {"name": "test_ok", "passed": True, "detail": "ok"},
+                {"name": "test_fail", "passed": False, "detail": "missing data"},
+            ],
+            "stats": {"checks_passed": 1, "checks_total": 2, "total_documents": 50},
+            "warnings": ["something"],
+        }
+        metrics = {
+            "n_questions": 1,
+            "k": 5,
+            "hit_rate": 1.0,
+            "hits": 1,
+            "mrr": 1.0,
+            "avg_precision_at_k": 0.2,
+            "avg_recall_at_k": 1.0,
+            "avg_ndcg_at_k": 1.0,
+            "latency": {"min_ms": 5, "max_ms": 5, "median_ms": 5, "mean_ms": 5, "p95_ms": 5, "p99_ms": 5},
+            "by_category": {},
+            "by_difficulty": {},
+            "by_expected_source": {},
+            "consistency": {"avg_score": None, "groups": {}},
+            "multi_k": None,
+            "results": [
+                {
+                    "id": "q1", "hit": True, "first_hit_rank": 1, "precision_at_k": 0.2,
+                    "recall_at_k": 1.0, "ndcg_at_k": 1.0, "category": "test", "difficulty": "easy",
+                },
+            ],
+        }
+        md = mod._build_markdown_report(validation, metrics, k=5)
+        assert "## Index Validation" in md
+        assert "FAILED" in md
+        assert "Failed checks" in md
+        assert "## Retrieval Evaluation" in md
