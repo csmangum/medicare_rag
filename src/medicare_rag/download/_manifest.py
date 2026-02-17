@@ -1,7 +1,7 @@
 """Shared manifest writing for download scripts."""
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -37,7 +37,7 @@ def write_manifest(
         entries.append({"path": str(rel), "file_hash": fhash})
     data: dict = {
         "source_url": source_url,
-        "download_date": datetime.now(timezone.utc).isoformat(),
+        "download_date": datetime.now(UTC).isoformat(),
         "files": entries,
     }
     if sources is not None:

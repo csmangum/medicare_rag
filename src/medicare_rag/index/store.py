@@ -8,12 +8,25 @@ from langchain_core.embeddings import Embeddings
 if TYPE_CHECKING:
     from langchain_chroma import Chroma
 
-from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME
+from medicare_rag.config import (
+    CHROMA_DIR,
+    CHROMA_UPSERT_BATCH_SIZE,
+    COLLECTION_NAME,
+    GET_META_BATCH_SIZE,
+)
 
-# Chroma client enforces a max batch size (~5461); stay under it
-CHROMA_UPSERT_BATCH_SIZE = 5000
-# Batch size for get(include=["metadatas"]); SQLite has a limit on SQL variables (~999)
-GET_META_BATCH_SIZE = 500
+
+def _get_raw_collection(store: "Chroma"):
+    """Access the underlying ChromaDB collection from a LangChain Chroma wrapper.
+    Raises RuntimeError if the private API has changed.
+    """
+    coll = getattr(store, "_collection", None)
+    if coll is None:
+        raise RuntimeError(
+            "langchain-chroma API changed: _collection not found. "
+            f"Pin langchain-chroma or update {__name__}."
+        )
+    return coll
 
 
 # Chroma allows str, int, float, bool in metadata
@@ -69,7 +82,7 @@ def upsert_documents(
     # We use the LangChain Chroma wrapper's _collection for batched get(include=["metadatas"])
     # and upsert() to support incremental indexing by content_hash. Batched get avoids
     # SQLite "too many SQL variables" when the collection is large.
-    collection = store._collection
+    collection = _get_raw_collection(store)
     id_to_hash: dict[str, str] = {}
     offset = 0
     while True:

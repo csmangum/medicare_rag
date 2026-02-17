@@ -7,21 +7,25 @@ import csv
 import json
 import logging
 import re
-import zipfile
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
-from typing import Literal
 from xml.etree.ElementTree import Element
 
 import pdfplumber
 from bs4 import BeautifulSoup
 
+from medicare_rag.ingest import SourceKind
+
+try:
+    import defusedxml.ElementTree as SafeET
+except ImportError:
+    SafeET = None
+
 logger = logging.getLogger(__name__)
 
 # Minimum chars per page to consider pdfplumber extraction "good"
 _PDF_MIN_CHARS_PER_PAGE = 50
-
-SourceKind = Literal["iom", "mcd", "codes", "all"]
 
 
 def _meta_schema(
@@ -103,7 +107,7 @@ def _extract_pdf_page_unstructured(pdf_path: Path) -> str:
                 texts.append(str(el))
         full = "\n".join(texts)
         return full.strip()
-    except Exception as e:
+    except (ImportError, OSError) as e:
         logger.debug("Unstructured fallback failed for %s: %s", pdf_path, e)
         return ""
 
@@ -154,9 +158,6 @@ def extract_iom(processed_dir: Path, raw_dir: Path, *, force: bool = False) -> l
             except OSError as e:
                 logger.warning("Extract failed for %s: %s", pdf_path, e)
                 continue
-            except Exception as e:
-                logger.warning("Extract failed for %s: %s", pdf_path, e)
-                raise
             if not text.strip():
                 logger.warning("No text recovered for %s; skipping", pdf_path)
                 continue
@@ -253,7 +254,7 @@ def extract_mcd(processed_dir: Path, raw_dir: Path, *, force: bool = False) -> l
         if not csv_files and zpath.exists():
             try:
                 csv_files = _extract_mcd_zip(mcd_dir, zpath, zip_name.replace(".zip", ""))
-            except Exception as e:
+            except (zipfile.BadZipFile, OSError) as e:
                 logger.warning("Failed to extract %s: %s", zpath, e)
                 continue
         if not csv_files:
@@ -391,7 +392,7 @@ def extract_hcpcs(processed_dir: Path, raw_dir: Path, *, force: bool = False) ->
         current: dict | None = None
         try:
             lines = hcpcs_file.read_text(encoding="utf-8", errors="replace").splitlines()
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             logger.warning("HCPCS read %s: %s", hcpcs_file, e)
             continue
         for line in lines:
@@ -450,7 +451,10 @@ def extract_icd10cm(processed_dir: Path, raw_dir: Path, *, force: bool = False) 
                     continue
                 for xml_name in xml_names[:1]:
                     with zf.open(xml_name) as f:
-                        root = ET.parse(f).getroot()
+                        if SafeET is not None:
+                            root = SafeET.parse(f).getroot()
+                        else:
+                            root = ET.parse(f).getroot()
                     break
             if root is None:
                 logger.warning("ICD-10-CM %s: failed to parse XML root element", zip_path)

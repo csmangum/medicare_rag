@@ -285,6 +285,20 @@ def test_sanitize_filename_from_url() -> None:
     assert sanitize_filename_from_url("https://example.com/path/../other.pdf", "default") == "other.pdf"
 
 
+def test_sanitize_filename_from_url_encoded_traversal() -> None:
+    """Percent-encoded path traversal (e.g. %2e%2e%2f) is decoded then rejected."""
+    # %2e%2e%2f decodes to ../
+    assert sanitize_filename_from_url("https://example.com/%2e%2e%2fetc%2fpasswd", "default") == "default"
+    # %2e%2e decodes to ..
+    assert sanitize_filename_from_url("https://example.com/foo%2e%2e", "default") == "default"
+
+
+def test_sanitize_filename_from_url_empty_and_query() -> None:
+    """Empty URL and query-only path return default."""
+    assert sanitize_filename_from_url("", "fallback") == "fallback"
+    assert sanitize_filename_from_url("https://example.com?", "fallback") == "fallback"
+
+
 def test_iom_duplicate_filenames_disambiguated(tmp_raw: Path) -> None:
     """Two PDFs with the same URL path segment get disambiguated (e.g. document.pdf, document_1.pdf)."""
     index_html = """

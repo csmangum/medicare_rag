@@ -8,7 +8,11 @@ import httpx
 from bs4 import BeautifulSoup
 
 from medicare_rag.download._manifest import file_sha256, write_manifest
-from medicare_rag.download._utils import DOWNLOAD_TIMEOUT, sanitize_filename_from_url
+from medicare_rag.download._utils import (
+    DOWNLOAD_TIMEOUT,
+    sanitize_filename_from_url,
+    stream_download,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +87,7 @@ def download_iom(raw_dir: Path, *, force: bool = False) -> None:
                     continue
 
                 logger.info("Downloading %s -> %s", pdf_url, dest)
-                with client.stream("GET", pdf_url) as r:
-                    r.raise_for_status()
-                    with dest.open("wb") as f:
-                        for chunk in r.iter_bytes():
-                            if chunk:
-                                f.write(chunk)
+                stream_download(client, pdf_url, dest)
                 try:
                     h = file_sha256(dest)
                 except OSError:

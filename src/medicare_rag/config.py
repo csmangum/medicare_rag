@@ -2,12 +2,38 @@
 
 Default DATA_DIR is best when running from repo root or with an editable install.
 """
+import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_int(key: str, default: int) -> int:
+    raw = os.environ.get(key)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Invalid %s=%r, using default %d", key, raw, default)
+        return default
+
+
+def _safe_float(key: str, default: float) -> float:
+    raw = os.environ.get(key)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("Invalid %s=%r, using default %s", key, raw, default)
+        return default
+
 
 # Repo root: directory containing pyproject.toml (when run from repo or editable install)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -25,12 +51,21 @@ EMBEDDING_MODEL = os.environ.get(
     "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
 )
 
+# Chroma batch sizes (env-overridable)
+CHROMA_UPSERT_BATCH_SIZE = _safe_int("CHROMA_UPSERT_BATCH_SIZE", 5000)
+GET_META_BATCH_SIZE = _safe_int("GET_META_BATCH_SIZE", 500)
+
+# Download timeout (seconds)
+DOWNLOAD_TIMEOUT = _safe_float("DOWNLOAD_TIMEOUT", 60.0)
+
+# Chunking defaults
+CHUNK_SIZE = _safe_int("CHUNK_SIZE", 1000)
+CHUNK_OVERLAP = _safe_int("CHUNK_OVERLAP", 200)
+
 # Phase 4: local LLM (Hugging Face pipeline, runs with sentence-transformers stack)
 LOCAL_LLM_MODEL = os.environ.get(
     "LOCAL_LLM_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 )
 LOCAL_LLM_DEVICE = os.environ.get("LOCAL_LLM_DEVICE", "auto")
-LOCAL_LLM_MAX_NEW_TOKENS = int(os.environ.get("LOCAL_LLM_MAX_NEW_TOKENS", "512"))
-LOCAL_LLM_REPETITION_PENALTY = float(
-    os.environ.get("LOCAL_LLM_REPETITION_PENALTY", "1.05")
-)
+LOCAL_LLM_MAX_NEW_TOKENS = _safe_int("LOCAL_LLM_MAX_NEW_TOKENS", 512)
+LOCAL_LLM_REPETITION_PENALTY = _safe_float("LOCAL_LLM_REPETITION_PENALTY", 1.05)

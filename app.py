@@ -6,6 +6,7 @@ Launch:
 
 from __future__ import annotations
 
+import html
 import re
 import time
 from typing import Any
@@ -14,7 +15,11 @@ import streamlit as st
 
 from medicare_rag.config import COLLECTION_NAME, EMBEDDING_MODEL
 from medicare_rag.index.embed import get_embeddings
-from medicare_rag.index.store import GET_META_BATCH_SIZE, get_or_create_chroma
+from medicare_rag.index.store import (
+    GET_META_BATCH_SIZE,
+    _get_raw_collection,
+    get_or_create_chroma,
+)
 
 st.set_page_config(
     page_title="Medicare Embedding Search",
@@ -41,18 +46,17 @@ def _load_store():
 @st.cache_data(show_spinner=False, ttl=300)
 def _get_collection_meta(_store) -> dict[str, Any]:
     """Gather metadata stats from the Chroma collection for filter options.
-    
+
     Cached for 5 minutes to avoid reloading all metadata on every rerun.
     Cache will automatically invalidate after TTL expires, allowing new documents
     to appear in filters.
     Fetches metadata in batches to avoid ChromaDB/SQLite "too many SQL variables" error.
-    
+
     Args:
         _store: Chroma vector store. Underscore prefix follows Streamlit convention
                 to exclude this parameter from the cache key (only TTL-based invalidation).
     """
-    # Uses the LangChain Chroma wrapper's private _collection for batched get(); if langchain-chroma changes, this may need updating.
-    collection = _store._collection
+    collection = _get_raw_collection(_store)
     if collection.count() == 0:
         return {"count": 0, "sources": [], "manuals": [], "jurisdictions": []}
 
@@ -198,12 +202,12 @@ def _build_metadata_filter(
         parts["manual"] = manual_filter
     if jurisdiction_filter and jurisdiction_filter != "All":
         parts["jurisdiction"] = jurisdiction_filter
-    
+
     # ChromaDB requires exactly one key in a where-clause dict.
     # If we have multiple filters, wrap them in $and operator.
     if len(parts) > 1:
         return {"$and": [{k: v} for k, v in parts.items()]}
-    
+
     return parts or None
 
 
@@ -247,22 +251,15 @@ def _render_result_card(rank: int, doc: Any, score: float, show_full: bool) -> N
 
 
 def _escape(text: str) -> str:
-    """Basic HTML entity escaping."""
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&#39;")
-    )
+    """HTML entity escaping for safe display in markdown."""
+    return html.escape(text, quote=True)
 
 
 def _get_embedding_dimensions(store, embeddings) -> tuple[int | None, int]:
     """Return (collection_embedding_dim, current_model_dim).
     collection_embedding_dim is None if the collection is empty.
     """
-    # Uses the LangChain Chroma wrapper's private _collection for batched get(); if langchain-chroma changes, this may need updating.
-    collection = store._collection
+    collection = _get_raw_collection(store)
     model_dim: int = len(embeddings.embed_query("x"))
     try:
         sample = collection.get(limit=1, include=["embeddings"])
@@ -344,7 +341,10 @@ def main() -> None:
 
     # ---- Main Area ----
     st.title("Medicare Embedding Search")
-    st.markdown("Search your indexed Medicare documents by semantic similarity. Use the sidebar to filter and tune results.")
+    st.markdown(
+        "Search your indexed Medicare documents by semantic similarity. "
+        "Use the sidebar to filter and tune results."
+    )
 
     # -- Quick-check bubbles --
     st.markdown("##### Quick checks")
@@ -366,11 +366,11 @@ def main() -> None:
     if query and dimension_mismatch:
         st.error(
             "**Embedding dimension mismatch.** The index was built with a different "
-            "embedding model (expected dimension **{}**). The current model "
-            "(`{}`) produces dimension **{}**. Either set `EMBEDDING_MODEL` in `.env` "
-            "to the model used during ingest (e.g. one that outputs {}‑dim vectors), "
-            "or re-run ingestion with the current model: `python scripts/ingest_all.py`."
-            .format(coll_dim, EMBEDDING_MODEL, model_dim, coll_dim)
+            f"embedding model (expected dimension **{coll_dim}**). The current model "
+            f"(`{EMBEDDING_MODEL}`) produces dimension **{model_dim}**. Set "
+            "`EMBEDDING_MODEL` in `.env` to the model used during ingest "
+            f"(e.g. one that outputs {coll_dim}-dim vectors), or re-run ingestion: "
+            "`python scripts/ingest_all.py`."
         )
     elif query and doc_count > 0:
         metadata_filter = _build_metadata_filter(
@@ -388,7 +388,10 @@ def main() -> None:
             st.markdown(f"**{len(results)}** results in **{elapsed:.3f}s**")
 
             if not results:
-                st.info("No results matched your query and filters. Try broadening your search or adjusting filters.")
+                st.info(
+                    "No results matched your query and filters. "
+                    "Try broadening your search or adjusting filters."
+                )
             else:
                 for rank, (doc, score) in enumerate(results, start=1):
                     _render_result_card(rank, doc, score, show_full_content)
@@ -400,11 +403,11 @@ def main() -> None:
                 expected_dim, got_dim = int(match.group(1)), int(match.group(2))
                 st.error(
                     "**Embedding dimension mismatch.** The index was built with a different "
-                    "embedding model (expected dimension **{}**). The current model "
-                    "(`{}`) produces dimension **{}**. Either set `EMBEDDING_MODEL` in `.env` "
-                    "to the model used during ingest (e.g. one that outputs {}‑dim vectors), "
-                    "or re-run ingestion with the current model: `python scripts/ingest_all.py`."
-                    .format(expected_dim, EMBEDDING_MODEL, got_dim, expected_dim)
+                    f"embedding model (expected dimension **{expected_dim}**). The current model "
+                    f"(`{EMBEDDING_MODEL}`) produces dimension **{got_dim}**. Set "
+                    "`EMBEDDING_MODEL` in `.env` to the model used during ingest "
+                    f"(e.g. one that outputs {expected_dim}-dim vectors), or re-run ingestion: "
+                    "`python scripts/ingest_all.py`."
                 )
             else:
                 raise

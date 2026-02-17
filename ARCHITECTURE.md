@@ -98,8 +98,8 @@ flowchart LR
 | **Codes** | `download/codes.py` | HCPCS Level II codes, optional ICD-10-CM | HCPCS ZIP from CMS quarterly page; ICD-10-CM from CDC (env-configured URL) |
 
 **Key design decisions:**
-- All HTTP uses `httpx` with streaming for large files and a shared 60-second timeout
-- Filenames are sanitized via `_utils.sanitize_filename_from_url()` to prevent path traversal
+- All HTTP uses `httpx` with streaming for large files and a shared timeout (default 60s, overridable via `DOWNLOAD_TIMEOUT`)
+- Filenames are sanitized via `_utils.sanitize_filename_from_url()` (including percent-decoding) to prevent path traversal
 - ZIP extraction uses `_safe_extract_zip()` which validates that resolved paths stay within the output directory (zip-slip protection)
 - Each source writes a `manifest.json` containing source URL, download date, and file list with SHA-256 hashes
 - Re-runs skip downloads when manifests and files exist (use `--force` to override)
@@ -131,7 +131,7 @@ flowchart LR
   Extract --> P2
   Extract --> P3
 
-  Processed --> Chunk["chunk.py\nRecursiveCharacterTextSplitter\n(1000 chars, 200 overlap)"]
+  Processed --> Chunk["chunk.py\nRecursiveCharacterTextSplitter\n(CHUNK_SIZE / CHUNK_OVERLAP from config)"]
   Chunk --> Docs["List[Document]\n(page_content + metadata)"]
 ```
 
@@ -142,7 +142,7 @@ flowchart LR
 | IOM PDFs | `pdfplumber` | Per-page text extraction; falls back to `unstructured` (optional dep) if < 50 chars/page |
 | MCD CSVs | `csv.DictReader` | Parses inner ZIPs → CSVs; HTML-strips cell content via BeautifulSoup; one document per row |
 | HCPCS | Fixed-width parser | 320-char record layout; merges continuation lines (RIC 4/8); one document per code |
-| ICD-10-CM | `xml.etree.ElementTree` | Extracts `<code>` + `<desc>` pairs from tabular XML inside ZIP |
+| ICD-10-CM | `defusedxml` (when available) or `xml.etree` | Extracts `<code>` + `<desc>` pairs from tabular XML inside ZIP; defusedxml used when available for safe parsing |
 
 **Metadata schema:** Every extracted document produces a `.meta.json` alongside its `.txt`, containing:
 - `source` — `"iom"`, `"mcd"`, or `"codes"`
@@ -152,7 +152,7 @@ flowchart LR
 - `doc_id` — unique identifier combining source type and document key
 
 **Chunking policy:**
-- Policy documents (IOM, MCD): `RecursiveCharacterTextSplitter` with 1000-char chunks and 200-char overlap; separators: `\n\n`, `\n`, `. `, ` `, `""`
+- Policy documents (IOM, MCD): `RecursiveCharacterTextSplitter` with configurable chunk size and overlap (defaults 1000 and 200 via `CHUNK_SIZE`, `CHUNK_OVERLAP`); separators: `\n\n`, `\n`, `. `, ` `, `""`
 - Code documents (HCPCS, ICD-10-CM): kept as single chunks (one document per code entry) since they are short, self-contained records
 - Chunk metadata inherits from parent document and adds `chunk_index` and `total_chunks`
 
@@ -173,10 +173,10 @@ flowchart LR
 **Embedding model:** `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions) by default, configurable via `EMBEDDING_MODEL` env var. Uses `langchain_huggingface.HuggingFaceEmbeddings` wrapper for LangChain compatibility.
 
 **Incremental upsert algorithm:**
-1. Fetch all existing document IDs and their `content_hash` values from ChromaDB (batched in groups of 500 to avoid SQLite variable limits)
+1. Fetch all existing document IDs and their `content_hash` values from ChromaDB (batched via `GET_META_BATCH_SIZE`, default 500, to avoid SQLite variable limits)
 2. For each incoming chunk, compute `content_hash` = SHA-256 of `page_content + doc_id + chunk_index`
 3. Skip chunks whose hash matches the stored hash (unchanged content)
-4. Embed only new/changed chunks, then upsert in batches of 5000 (ChromaDB's max batch size)
+4. Embed only new/changed chunks, then upsert in batches of `CHROMA_UPSERT_BATCH_SIZE` (default 5000, under ChromaDB's limit)
 5. Metadata is sanitized to ChromaDB-compatible types (str, int, float, bool only; None values dropped)
 
 **Chunk ID scheme:** `{doc_id}_{chunk_index}` for chunked documents, or plain `{doc_id}` for single-chunk code documents.
@@ -227,12 +227,12 @@ flowchart TB
       MCD["mcd.py — MCD bulk ZIP downloader + safe extractor"]
       Codes["codes.py — HCPCS + ICD-10-CM downloader"]
       Manifest["_manifest.py — Manifest writing + SHA-256 hashing"]
-      Utils["_utils.py — URL sanitization, shared timeout constant"]
+      Utils["_utils.py — URL sanitization, stream_download, DOWNLOAD_TIMEOUT from config"]
     end
 
     subgraph Ingest["ingest/ — Phase 2"]
-      IInit["__init__.py"]
-      Extract["extract.py — Multi-format extraction (PDF, CSV, fixed-width, XML)"]
+      IInit["__init__.py — SourceKind type"]
+      Extract["extract.py — Multi-format extraction (PDF, CSV, fixed-width, XML; defusedxml when available)"]
       Chunk["chunk.py — LangChain text splitter with source-aware chunking"]
     end
 
@@ -264,8 +264,13 @@ All configuration is centralized in a single module that loads `.env` via `pytho
 | `EMBEDDING_MODEL` | `"sentence-transformers/all-MiniLM-L6-v2"` | `EMBEDDING_MODEL` |
 | `LOCAL_LLM_MODEL` | `"TinyLlama/TinyLlama-1.1B-Chat-v1.0"` | `LOCAL_LLM_MODEL` |
 | `LOCAL_LLM_DEVICE` | `"auto"` | `LOCAL_LLM_DEVICE` |
-| `LOCAL_LLM_MAX_NEW_TOKENS` | `512` | `LOCAL_LLM_MAX_NEW_TOKENS` |
-| `LOCAL_LLM_REPETITION_PENALTY` | `1.05` | `LOCAL_LLM_REPETITION_PENALTY` |
+| `LOCAL_LLM_MAX_NEW_TOKENS` | `512` | `LOCAL_LLM_MAX_NEW_TOKENS` (invalid → default + warning) |
+| `LOCAL_LLM_REPETITION_PENALTY` | `1.05` | `LOCAL_LLM_REPETITION_PENALTY` (invalid → default + warning) |
+| `DOWNLOAD_TIMEOUT` | `60.0` | `DOWNLOAD_TIMEOUT` |
+| `CHUNK_SIZE` | `1000` | `CHUNK_SIZE` |
+| `CHUNK_OVERLAP` | `200` | `CHUNK_OVERLAP` |
+| `CHROMA_UPSERT_BATCH_SIZE` | `5000` | `CHROMA_UPSERT_BATCH_SIZE` |
+| `GET_META_BATCH_SIZE` | `500` | `GET_META_BATCH_SIZE` |
 
 ### Scripts (CLI Entry Points)
 
@@ -287,7 +292,7 @@ An optional web UI for interactive embedding search. Provides:
 - Embedding dimension mismatch detection and user-friendly error messages
 - Collection metadata cached with 5-minute TTL
 
-Uses the Chroma wrapper's `_collection` private API for batched metadata retrieval and dimension checks.
+Uses `_get_raw_collection(store)` from `index.store` to access the Chroma wrapper's underlying collection for batched metadata retrieval and dimension checks (wraps the private `_collection` API).
 
 ## Key Technical Decisions
 

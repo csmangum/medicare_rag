@@ -6,18 +6,14 @@ Loads extracted .txt + .meta.json from processed_dir and returns LangChain Docum
 import json
 import logging
 from pathlib import Path
-from typing import Literal
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from medicare_rag.config import CHUNK_OVERLAP, CHUNK_SIZE
+from medicare_rag.ingest import SourceKind
+
 logger = logging.getLogger(__name__)
-
-SourceKind = Literal["iom", "mcd", "codes", "all"]
-
-# Default splitter: ~1000 chars, ~200 overlap
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
 
 
 def _load_extracted_docs(
