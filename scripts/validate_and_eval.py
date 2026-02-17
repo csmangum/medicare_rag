@@ -68,7 +68,7 @@ def _load_retriever(k: int, metadata_filter: dict | None = None):
 
 def validate_index(store) -> dict:
     """Run comprehensive index validation. Returns a dict of results with 'passed' bool."""
-    from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME
+    from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME, _REPO_ROOT
 
     results: dict = {
         "passed": True,
@@ -88,7 +88,6 @@ def validate_index(store) -> dict:
 
     # 1. Chroma directory exists
     dir_exists = CHROMA_DIR.exists()
-    from medicare_rag.config import _REPO_ROOT
     try:
         rel_path = CHROMA_DIR.relative_to(_REPO_ROOT)
         detail = f"{rel_path} ({CHROMA_DIR})"
