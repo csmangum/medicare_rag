@@ -1,0 +1,1465 @@
+{
+  "validation": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "chroma_dir_exists",
+        "passed": true,
+        "detail": "data/chroma (/workspace/data/chroma)"
+      },
+      {
+        "name": "collection_accessible",
+        "passed": true,
+        "detail": "collection=medicare_rag"
+      },
+      {
+        "name": "collection_non_empty",
+        "passed": true,
+        "detail": "count=41802"
+      },
+      {
+        "name": "bulk_metadata_fetch",
+        "passed": true,
+        "detail": "fetched 41802 docs"
+      },
+      {
+        "name": "metadata_key_doc_id",
+        "passed": true,
+        "detail": "present in 100.0% of docs (41802/41802)"
+      },
+      {
+        "name": "metadata_key_content_hash",
+        "passed": true,
+        "detail": "present in 100.0% of docs (41802/41802)"
+      },
+      {
+        "name": "metadata_key_source",
+        "passed": true,
+        "detail": "present in 100.0% of docs"
+      },
+      {
+        "name": "source_iom_present",
+        "passed": true,
+        "detail": "count=16916"
+      },
+      {
+        "name": "source_mcd_present",
+        "passed": true,
+        "detail": "count=15881"
+      },
+      {
+        "name": "source_codes_present",
+        "passed": true,
+        "detail": "count=9005"
+      },
+      {
+        "name": "no_empty_documents",
+        "passed": true,
+        "detail": "empty=0/41802"
+      },
+      {
+        "name": "no_duplicate_ids",
+        "passed": true,
+        "detail": "all unique"
+      },
+      {
+        "name": "no_duplicate_content_hashes",
+        "passed": true,
+        "detail": "all unique"
+      },
+      {
+        "name": "similarity_search_generic",
+        "passed": true,
+        "detail": "query='Medicare coverage' returned 3 results"
+      },
+      {
+        "name": "similarity_search_claims",
+        "passed": true,
+        "detail": "query='billing claim submission' returned 3 results"
+      },
+      {
+        "name": "similarity_search_codes",
+        "passed": true,
+        "detail": "query='ICD-10 diagnosis code' returned 3 results"
+      },
+      {
+        "name": "embedding_dimension",
+        "passed": true,
+        "detail": "dim=384"
+      },
+      {
+        "name": "filter_retrieval_iom",
+        "passed": true,
+        "detail": "returned 2 results"
+      },
+      {
+        "name": "filter_correctness_iom",
+        "passed": true,
+        "detail": "all results match filter"
+      },
+      {
+        "name": "filter_retrieval_mcd",
+        "passed": true,
+        "detail": "returned 2 results"
+      },
+      {
+        "name": "filter_correctness_mcd",
+        "passed": true,
+        "detail": "all results match filter"
+      },
+      {
+        "name": "filter_retrieval_codes",
+        "passed": true,
+        "detail": "returned 2 results"
+      },
+      {
+        "name": "filter_correctness_codes",
+        "passed": true,
+        "detail": "all results match filter"
+      }
+    ],
+    "stats": {
+      "total_documents": 41802,
+      "source_distribution": {
+        "iom": 16916,
+        "mcd": 15881,
+        "codes": 9005
+      },
+      "metadata_keys": {
+        "content_hash": 41802,
+        "source": 41802,
+        "doc_id": 41802,
+        "total_chunks": 32797,
+        "chunk_index": 32797,
+        "manual": 16916,
+        "chapter": 16787,
+        "article_id": 10662,
+        "effective_date": 9005,
+        "hcpcs_code": 9005,
+        "code_type": 9005,
+        "title": 9005,
+        "lcd_id": 2919,
+        "ncd_id": 2300
+      },
+      "content_length": {
+        "min": 1,
+        "max": 4577,
+        "median": 488,
+        "mean": 531.6979570355485,
+        "p5": 82,
+        "p95": 989
+      },
+      "embedding_dimension": 384,
+      "checks_passed": 23,
+      "checks_total": 23
+    },
+    "warnings": []
+  },
+  "evaluation": {
+    "n_questions": 63,
+    "k": 5,
+    "hit_rate": 0.873015873015873,
+    "hits": 55,
+    "mrr": 0.8325396825396826,
+    "avg_precision_at_k": 0.7619047619047619,
+    "avg_ndcg_at_k": 0.9516433338125907,
+    "latency": {
+      "min_ms": 5.0,
+      "max_ms": 10.3,
+      "median_ms": 6.2,
+      "mean_ms": 6.3,
+      "p95_ms": 7.1,
+      "p99_ms": 10.3
+    },
+    "by_category": {
+      "abbreviation": {
+        "n": 5,
+        "hit_rate": 1.0,
+        "mrr": 0.9,
+        "avg_precision_at_k": 0.96,
+        "avg_ndcg_at_k": 0.9777444678108977
+      },
+      "appeals_denials": {
+        "n": 5,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_precision_at_k": 0.9199999999999999,
+        "avg_ndcg_at_k": 0.9917861452505697
+      },
+      "claims_billing": {
+        "n": 6,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_precision_at_k": 1.0,
+        "avg_ndcg_at_k": 1.0
+      },
+      "code_lookup": {
+        "n": 7,
+        "hit_rate": 0.14285714285714285,
+        "mrr": 0.14285714285714285,
+        "avg_precision_at_k": 0.08571428571428572,
+        "avg_ndcg_at_k": 0.7142857142857143
+      },
+      "coding_modifiers": {
+        "n": 5,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_precision_at_k": 0.96,
+        "avg_ndcg_at_k": 1.0
+      },
+      "compliance": {
+        "n": 3,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_precision_at_k": 0.8000000000000002,
+        "avg_ndcg_at_k": 0.9825833467372349
+      },
+      "consistency": {
+        "n": 4,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_precision_at_k": 0.95,
+        "avg_ndcg_at_k": 0.9889258598915724
+      },
+      "cross_source": {
+        "n": 4,
+        "hit_rate": 1.0,
+        "mrr": 0.675,
+        "avg_precision_at_k": 0.7,
+        "avg_ndcg_at_k": 0.9084162988571678
+      },
+      "edge_case": {
+        "n": 4,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_precision_at_k": 0.9,
+        "avg_ndcg_at_k": 0.9837922006731784
+      },
+      "lcd_policy": {
+        "n": 6,
+        "hit_rate": 0.6666666666666666,
+        "mrr": 0.6666666666666666,
+        "avg_precision_at_k": 0.43333333333333335,
+        "avg_ndcg_at_k": 0.9855416304050858
+      },
+      "payment": {
+        "n": 3,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_precision_at_k": 0.9333333333333332,
+        "avg_ndcg_at_k": 0.9931551210421414
+      },
+      "policy_coverage": {
+        "n": 6,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_precision_at_k": 0.9333333333333332,
+        "avg_ndcg_at_k": 0.9919912627133578
+      },
+      "semantic_retrieval": {
+        "n": 5,
+        "hit_rate": 1.0,
+        "mrr": 0.85,
+        "avg_precision_at_k": 0.72,
+        "avg_ndcg_at_k": 0.9577853530298819
+      }
+    },
+    "by_difficulty": {
+      "easy": {
+        "n": 9,
+        "hit_rate": 0.6666666666666666,
+        "mrr": 0.6666666666666666,
+        "avg_precision_at_k": 0.6222222222222222,
+        "avg_ndcg_at_k": 0.772438619586683
+      },
+      "hard": {
+        "n": 16,
+        "hit_rate": 0.875,
+        "mrr": 0.79375,
+        "avg_precision_at_k": 0.6625,
+        "avg_ndcg_at_k": 0.9650634066752968
+      },
+      "medium": {
+        "n": 38,
+        "hit_rate": 0.9210526315789473,
+        "mrr": 0.8881578947368421,
+        "avg_precision_at_k": 0.8368421052631579,
+        "avg_ndcg_at_k": 0.9884359986081136
+      }
+    },
+    "by_expected_source": {
+      "codes": {
+        "n": 18,
+        "hit_rate": 0.6666666666666666,
+        "mrr": 0.5666666666666667,
+        "avg_precision_at_k": 0.5555555555555556,
+        "avg_ndcg_at_k": 0.8623548630268423
+      },
+      "iom": {
+        "n": 52,
+        "hit_rate": 1.0,
+        "mrr": 0.9509615384615385,
+        "avg_precision_at_k": 0.8923076923076922,
+        "avg_ndcg_at_k": 0.9815438509185134
+      },
+      "mcd": {
+        "n": 16,
+        "hit_rate": 0.875,
+        "mrr": 0.828125,
+        "avg_precision_at_k": 0.7375,
+        "avg_ndcg_at_k": 0.9807081989459683
+      }
+    },
+    "consistency": {
+      "avg_score": 0.48333333333333334,
+      "groups": {
+        "cardiac_rehab": {
+          "score": 0.16666666666666666,
+          "pairwise_jaccard": [
+            0.16666666666666666
+          ],
+          "questions": [
+            "consistency_cardiac_rehab_1",
+            "consistency_cardiac_rehab_2"
+          ]
+        },
+        "wheelchair": {
+          "score": 0.8,
+          "pairwise_jaccard": [
+            0.8
+          ],
+          "questions": [
+            "consistency_wheelchair_1",
+            "consistency_wheelchair_2"
+          ]
+        }
+      }
+    },
+    "multi_k": {
+      "1": {
+        "k": 1,
+        "hit_rate": 0.8095238095238095,
+        "mrr": 0.8095238095238095,
+        "avg_precision_at_k": 0.8095238095238095,
+        "avg_ndcg_at_k": 0.9682539682539683
+      },
+      "3": {
+        "k": 3,
+        "hit_rate": 0.8412698412698413,
+        "mrr": 0.8253968253968254,
+        "avg_precision_at_k": 0.7619047619047619,
+        "avg_ndcg_at_k": 0.9620633346944726
+      },
+      "5": {
+        "k": 5,
+        "hit_rate": 0.873015873015873,
+        "mrr": 0.8325396825396826,
+        "avg_precision_at_k": 0.7619047619047619,
+        "avg_ndcg_at_k": 0.9516433338125907
+      },
+      "10": {
+        "k": 10,
+        "hit_rate": 0.9206349206349206,
+        "mrr": 0.8386621315192744,
+        "avg_precision_at_k": 0.7238095238095238,
+        "avg_ndcg_at_k": 0.9432256796860538
+      }
+    },
+    "results": [
+      {
+        "id": "iom_part_b_coverage",
+        "query": "What does Medicare Part B cover?",
+        "category": "policy_coverage",
+        "difficulty": "easy",
+        "latency_ms": 8.9,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "iom_part_a_inpatient",
+        "query": "What inpatient hospital services does Medicare Part A cover?",
+        "category": "policy_coverage",
+        "difficulty": "easy",
+        "latency_ms": 6.8,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "iom_skilled_nursing",
+        "query": "What are the coverage requirements for skilled nursing facility services under Medicare?",
+        "category": "policy_coverage",
+        "difficulty": "medium",
+        "latency_ms": 6.7,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "iom_home_health",
+        "query": "What conditions must be met for Medicare home health coverage?",
+        "category": "policy_coverage",
+        "difficulty": "medium",
+        "latency_ms": 6.1,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "iom_preventive_services",
+        "query": "What preventive services does Medicare cover?",
+        "category": "policy_coverage",
+        "difficulty": "easy",
+        "latency_ms": 6.3,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.6,
+        "ndcg_at_k": 0.9519475762801467,
+        "fully_relevant": 3,
+        "partially_relevant": 2,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "iom_medical_necessity",
+        "query": "How does Medicare define medical necessity for covered services?",
+        "category": "policy_coverage",
+        "difficulty": "medium",
+        "latency_ms": 6.5,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "claims_processing_overview",
+        "query": "How are Medicare claims processed and submitted?",
+        "category": "claims_billing",
+        "difficulty": "easy",
+        "latency_ms": 6.1,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "claims_electronic_submission",
+        "query": "What are the requirements for electronic Medicare claim submission?",
+        "category": "claims_billing",
+        "difficulty": "medium",
+        "latency_ms": 6.2,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "claims_timely_filing",
+        "query": "What is the timely filing deadline for Medicare claims?",
+        "category": "claims_billing",
+        "difficulty": "medium",
+        "latency_ms": 6.9,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "billing_outpatient_hospital",
+        "query": "How should outpatient hospital services be billed to Medicare?",
+        "category": "claims_billing",
+        "difficulty": "medium",
+        "latency_ms": 6.5,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "billing_physician_services",
+        "query": "What are the billing requirements for physician services under Medicare Part B?",
+        "category": "claims_billing",
+        "difficulty": "medium",
+        "latency_ms": 6.6,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "secondary_payer",
+        "query": "When is Medicare the secondary payer?",
+        "category": "claims_billing",
+        "difficulty": "medium",
+        "latency_ms": 6.2,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "modifier_bilateral",
+        "query": "What modifier is required for bilateral procedures under Medicare Part B?",
+        "category": "coding_modifiers",
+        "difficulty": "medium",
+        "latency_ms": 6.4,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "modifier_cpt_general",
+        "query": "CPT modifiers for Medicare billing",
+        "category": "coding_modifiers",
+        "difficulty": "easy",
+        "latency_ms": 6.7,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "modifier_59",
+        "query": "When should modifier 59 be used for distinct procedural services?",
+        "category": "coding_modifiers",
+        "difficulty": "medium",
+        "latency_ms": 6.7,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "modifier_25",
+        "query": "What is modifier 25 and when is it appropriate to use for evaluation and management services?",
+        "category": "coding_modifiers",
+        "difficulty": "medium",
+        "latency_ms": 7.1,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "modifier_26_tc",
+        "query": "What is the difference between modifier 26 and modifier TC for professional and technical components?",
+        "category": "coding_modifiers",
+        "difficulty": "medium",
+        "latency_ms": 6.8,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "hcpcs_codes_general",
+        "query": "HCPCS Level II codes for supplies and procedures",
+        "category": "code_lookup",
+        "difficulty": "easy",
+        "latency_ms": 6.1,
+        "hit": false,
+        "first_hit_rank": null,
+        "reciprocal_rank": 0.0,
+        "precision_at_k": 0.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 0,
+        "partially_relevant": 5,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "hcpcs_dme",
+        "query": "What HCPCS codes are used for durable medical equipment?",
+        "category": "code_lookup",
+        "difficulty": "medium",
+        "latency_ms": 6.2,
+        "hit": false,
+        "first_hit_rank": null,
+        "reciprocal_rank": 0.0,
+        "precision_at_k": 0.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 0,
+        "partially_relevant": 5,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "hcpcs_drug_codes",
+        "query": "HCPCS J codes for injectable drugs administered in physician office",
+        "category": "code_lookup",
+        "difficulty": "medium",
+        "latency_ms": 6.8,
+        "hit": false,
+        "first_hit_rank": null,
+        "reciprocal_rank": 0.0,
+        "precision_at_k": 0.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 0,
+        "partially_relevant": 5,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "icd10_diabetes_foot_ulcer",
+        "query": "What ICD-10 code maps to type 2 diabetes with foot ulcer?",
+        "category": "code_lookup",
+        "difficulty": "medium",
+        "latency_ms": 6.9,
+        "hit": false,
+        "first_hit_rank": null,
+        "reciprocal_rank": 0.0,
+        "precision_at_k": 0.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 0,
+        "partially_relevant": 5,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "icd10_hypertension",
+        "query": "What is the ICD-10-CM code for essential hypertension?",
+        "category": "code_lookup",
+        "difficulty": "easy",
+        "latency_ms": 10.3,
+        "hit": false,
+        "first_hit_rank": null,
+        "reciprocal_rank": 0.0,
+        "precision_at_k": 0.0,
+        "ndcg_at_k": 0.0,
+        "fully_relevant": 0,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "mcd"
+        ]
+      },
+      {
+        "id": "icd10_chest_pain",
+        "query": "ICD-10 diagnosis code for chest pain unspecified",
+        "category": "code_lookup",
+        "difficulty": "easy",
+        "latency_ms": 7.8,
+        "hit": false,
+        "first_hit_rank": null,
+        "reciprocal_rank": 0.0,
+        "precision_at_k": 0.0,
+        "ndcg_at_k": 0.0,
+        "fully_relevant": 0,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "mcd"
+        ]
+      },
+      {
+        "id": "icd10_copd",
+        "query": "ICD-10-CM codes for chronic obstructive pulmonary disease COPD",
+        "category": "code_lookup",
+        "difficulty": "medium",
+        "latency_ms": 6.8,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.6,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 3,
+        "partially_relevant": 2,
+        "sources_in_topk": [
+          "codes",
+          "iom"
+        ]
+      },
+      {
+        "id": "lcd_cardiac_rehab",
+        "query": "Does Novitas (JL) have an LCD for cardiac rehab?",
+        "category": "lcd_policy",
+        "difficulty": "hard",
+        "latency_ms": 6.7,
+        "hit": false,
+        "first_hit_rank": null,
+        "reciprocal_rank": 0.0,
+        "precision_at_k": 0.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 0,
+        "partially_relevant": 5,
+        "sources_in_topk": [
+          "mcd"
+        ]
+      },
+      {
+        "id": "lcd_hyperbaric_oxygen",
+        "query": "Is hyperbaric oxygen therapy covered for diabetic wounds?",
+        "category": "lcd_policy",
+        "difficulty": "hard",
+        "latency_ms": 6.7,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.6,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 3,
+        "partially_relevant": 2,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "ncd_coverage_criteria",
+        "query": "What are the national coverage determination criteria for Medicare services?",
+        "category": "lcd_policy",
+        "difficulty": "medium",
+        "latency_ms": 6.6,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "lcd_physical_therapy",
+        "query": "What LCDs apply to outpatient physical therapy services?",
+        "category": "lcd_policy",
+        "difficulty": "hard",
+        "latency_ms": 6.3,
+        "hit": false,
+        "first_hit_rank": null,
+        "reciprocal_rank": 0.0,
+        "precision_at_k": 0.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 0,
+        "partially_relevant": 5,
+        "sources_in_topk": [
+          "mcd",
+          "iom"
+        ]
+      },
+      {
+        "id": "lcd_imaging_advanced",
+        "query": "LCD coverage for advanced imaging MRI and CT scans",
+        "category": "lcd_policy",
+        "difficulty": "hard",
+        "latency_ms": 6.5,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.6,
+        "ndcg_at_k": 0.9665488040107213,
+        "fully_relevant": 3,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "mcd",
+          "iom"
+        ]
+      },
+      {
+        "id": "mcd_wound_care",
+        "query": "Medicare coverage for wound care and wound vac therapy",
+        "category": "lcd_policy",
+        "difficulty": "hard",
+        "latency_ms": 6.0,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.4,
+        "ndcg_at_k": 0.9467009784197933,
+        "fully_relevant": 2,
+        "partially_relevant": 3,
+        "sources_in_topk": [
+          "mcd",
+          "iom"
+        ]
+      },
+      {
+        "id": "appeals_general",
+        "query": "What is the Medicare appeals process for denied claims?",
+        "category": "appeals_denials",
+        "difficulty": "medium",
+        "latency_ms": 6.0,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "appeals_power_wheelchair",
+        "query": "What documentation is needed to appeal a Medicare denial for power wheelchair?",
+        "category": "appeals_denials",
+        "difficulty": "hard",
+        "latency_ms": 6.2,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 0.9794653631264242,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "appeals_levels",
+        "query": "What are the five levels of Medicare appeals?",
+        "category": "appeals_denials",
+        "difficulty": "medium",
+        "latency_ms": 6.0,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 0.9794653631264242,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "denial_reasons",
+        "query": "Common reasons for Medicare claim denials",
+        "category": "appeals_denials",
+        "difficulty": "medium",
+        "latency_ms": 5.8,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "redetermination_timeline",
+        "query": "How long does a provider have to file a Medicare redetermination?",
+        "category": "appeals_denials",
+        "difficulty": "medium",
+        "latency_ms": 6.5,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "rehab_coverage",
+        "query": "Coverage for cardiac rehabilitation",
+        "category": "cross_source",
+        "difficulty": "medium",
+        "latency_ms": 6.0,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "diabetes_management_crossref",
+        "query": "Medicare coverage and coding for diabetes management and supplies",
+        "category": "cross_source",
+        "difficulty": "hard",
+        "latency_ms": 6.1,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "mcd",
+          "iom"
+        ]
+      },
+      {
+        "id": "dme_coverage_and_codes",
+        "query": "Durable medical equipment coverage policy and HCPCS codes",
+        "category": "cross_source",
+        "difficulty": "hard",
+        "latency_ms": 6.1,
+        "hit": true,
+        "first_hit_rank": 5,
+        "reciprocal_rank": 0.2,
+        "precision_at_k": 0.2,
+        "ndcg_at_k": 0.7680259722523537,
+        "fully_relevant": 1,
+        "partially_relevant": 2,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "laboratory_tests_billing",
+        "query": "Medicare billing rules and codes for laboratory tests",
+        "category": "cross_source",
+        "difficulty": "hard",
+        "latency_ms": 6.0,
+        "hit": true,
+        "first_hit_rank": 2,
+        "reciprocal_rank": 0.5,
+        "precision_at_k": 0.6,
+        "ndcg_at_k": 0.8656392231763174,
+        "fully_relevant": 3,
+        "partially_relevant": 2,
+        "sources_in_topk": [
+          "mcd",
+          "iom"
+        ]
+      },
+      {
+        "id": "sem_medical_necessity_natural",
+        "query": "When can Medicare deny a service because it wasn't medically needed?",
+        "category": "semantic_retrieval",
+        "difficulty": "medium",
+        "latency_ms": 6.5,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.6,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 3,
+        "partially_relevant": 2,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "sem_prior_auth",
+        "query": "Do I need approval before getting a procedure done under Medicare?",
+        "category": "semantic_retrieval",
+        "difficulty": "medium",
+        "latency_ms": 6.3,
+        "hit": true,
+        "first_hit_rank": 4,
+        "reciprocal_rank": 0.25,
+        "precision_at_k": 0.4,
+        "ndcg_at_k": 0.8223779611386884,
+        "fully_relevant": 2,
+        "partially_relevant": 3,
+        "sources_in_topk": [
+          "mcd",
+          "iom"
+        ]
+      },
+      {
+        "id": "sem_ambulance_coverage",
+        "query": "Will Medicare pay for an ambulance ride to the hospital?",
+        "category": "semantic_retrieval",
+        "difficulty": "medium",
+        "latency_ms": 6.2,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "sem_copay_deductible",
+        "query": "How much do patients have to pay out of pocket for Medicare Part B services?",
+        "category": "semantic_retrieval",
+        "difficulty": "medium",
+        "latency_ms": 6.4,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "sem_surgery_coverage",
+        "query": "Is my surgery going to be covered by Medicare?",
+        "category": "semantic_retrieval",
+        "difficulty": "medium",
+        "latency_ms": 6.0,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.6,
+        "ndcg_at_k": 0.9665488040107213,
+        "fully_relevant": 3,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "abbrev_snf",
+        "query": "SNF coverage requirements",
+        "category": "abbreviation",
+        "difficulty": "medium",
+        "latency_ms": 5.9,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "abbrev_dme",
+        "query": "DME billing and coverage",
+        "category": "abbreviation",
+        "difficulty": "medium",
+        "latency_ms": 5.7,
+        "hit": true,
+        "first_hit_rank": 2,
+        "reciprocal_rank": 0.5,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 0.8887223390544889,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "abbrev_asc",
+        "query": "ASC payment and billing rules",
+        "category": "abbreviation",
+        "difficulty": "medium",
+        "latency_ms": 5.8,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "abbrev_mac",
+        "query": "MAC jurisdiction and contractor responsibilities",
+        "category": "abbreviation",
+        "difficulty": "medium",
+        "latency_ms": 5.8,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "abbrev_opps",
+        "query": "OPPS payment methodology",
+        "category": "abbreviation",
+        "difficulty": "hard",
+        "latency_ms": 5.6,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "edge_very_short",
+        "query": "Medicare",
+        "category": "edge_case",
+        "difficulty": "easy",
+        "latency_ms": 5.0,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "edge_specific_manual",
+        "query": "IOM 100-04 Chapter 1 general billing requirements",
+        "category": "edge_case",
+        "difficulty": "hard",
+        "latency_ms": 6.0,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 0.9557034395662896,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "edge_multi_concept",
+        "query": "Medicare Part B outpatient cardiac rehabilitation billing with modifier 59 for distinct procedural service",
+        "category": "edge_case",
+        "difficulty": "hard",
+        "latency_ms": 6.5,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "edge_negation",
+        "query": "What services are NOT covered by Medicare Part B?",
+        "category": "edge_case",
+        "difficulty": "hard",
+        "latency_ms": 5.9,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 0.9794653631264242,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "consistency_cardiac_rehab_1",
+        "query": "cardiac rehabilitation coverage criteria",
+        "category": "consistency",
+        "difficulty": "medium",
+        "latency_ms": 5.5,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "mcd",
+          "iom"
+        ]
+      },
+      {
+        "id": "consistency_cardiac_rehab_2",
+        "query": "Does Medicare cover cardiac rehab programs?",
+        "category": "consistency",
+        "difficulty": "medium",
+        "latency_ms": 5.7,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 0.9557034395662896,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "mcd",
+          "iom"
+        ]
+      },
+      {
+        "id": "consistency_wheelchair_1",
+        "query": "power wheelchair Medicare coverage policy",
+        "category": "consistency",
+        "difficulty": "medium",
+        "latency_ms": 5.6,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "consistency_wheelchair_2",
+        "query": "What are the requirements for Medicare to pay for a power wheelchair?",
+        "category": "consistency",
+        "difficulty": "medium",
+        "latency_ms": 6.2,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "mcd",
+          "iom"
+        ]
+      },
+      {
+        "id": "program_integrity",
+        "query": "Medicare fraud and abuse prevention requirements",
+        "category": "compliance",
+        "difficulty": "medium",
+        "latency_ms": 5.7,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 0.9557034395662896,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "documentation_requirements",
+        "query": "What documentation must providers maintain for Medicare services?",
+        "category": "compliance",
+        "difficulty": "medium",
+        "latency_ms": 5.9,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 0.9920466006454153,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "enrollment_requirements",
+        "query": "Medicare provider enrollment requirements and process",
+        "category": "compliance",
+        "difficulty": "medium",
+        "latency_ms": 5.7,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "payment_drg",
+        "query": "How does the DRG-based payment system work for inpatient hospitals?",
+        "category": "payment",
+        "difficulty": "hard",
+        "latency_ms": 6.4,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 0.8,
+        "ndcg_at_k": 0.9794653631264242,
+        "fully_relevant": 4,
+        "partially_relevant": 1,
+        "sources_in_topk": [
+          "iom",
+          "mcd"
+        ]
+      },
+      {
+        "id": "payment_apc",
+        "query": "APC payment methodology for outpatient hospital services",
+        "category": "payment",
+        "difficulty": "hard",
+        "latency_ms": 5.9,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      },
+      {
+        "id": "payment_physician_fee_schedule",
+        "query": "Medicare physician fee schedule and RVU-based payment",
+        "category": "payment",
+        "difficulty": "hard",
+        "latency_ms": 6.0,
+        "hit": true,
+        "first_hit_rank": 1,
+        "reciprocal_rank": 1.0,
+        "precision_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "fully_relevant": 5,
+        "partially_relevant": 0,
+        "sources_in_topk": [
+          "iom"
+        ]
+      }
+    ]
+  }
+}

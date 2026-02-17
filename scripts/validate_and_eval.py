@@ -68,7 +68,7 @@ def _load_retriever(k: int, metadata_filter: dict | None = None):
 
 def validate_index(store) -> dict:
     """Run comprehensive index validation. Returns a dict of results with 'passed' bool."""
-    from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME
+    from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME, _REPO_ROOT
 
     results: dict = {
         "passed": True,
@@ -88,7 +88,12 @@ def validate_index(store) -> dict:
 
     # 1. Chroma directory exists
     dir_exists = CHROMA_DIR.exists()
-    _check("chroma_dir_exists", dir_exists, str(CHROMA_DIR))
+    try:
+        rel_path = CHROMA_DIR.relative_to(_REPO_ROOT)
+        detail = f"{rel_path} ({CHROMA_DIR})"
+    except ValueError:
+        detail = str(CHROMA_DIR)
+    _check("chroma_dir_exists", dir_exists, detail)
     if not dir_exists:
         return results
     logger.info("CHROMA_DIR exists: %s", CHROMA_DIR)
@@ -345,33 +350,62 @@ def _ndcg(relevances: list[float], k: int) -> float:
     return dcg / ideal
 
 
+def _keyword_fraction(text: str, expected_keywords: list[str]) -> float:
+    """Return fraction of expected keywords found in text (case-insensitive).
+
+    Uses per-keyword matching so that a document mentioning 1 of 4 keywords
+    scores 0.25 rather than a binary 1.0.  This avoids inflating relevance
+    for broad keyword lists where a single common word like "coverage" would
+    previously count as a full keyword match.
+    """
+    if not expected_keywords:
+        return 1.0
+    text_lower = text.lower()
+    hits = sum(1 for kw in expected_keywords if kw.lower() in text_lower)
+    return hits / len(expected_keywords)
+
+
 def _question_relevance(
     docs: list,
     expected_keywords: list[str] | None,
     expected_sources: list[str] | None,
 ) -> list[float]:
-    """Score each doc: 1.0 if both keyword and source match, 0.5 if only one matches, 0.0 otherwise."""
+    """Score each doc on a 0–1 scale combining keyword coverage and source match.
+
+    Scoring:
+      keyword_score = fraction of expected_keywords found in doc text (0–1)
+      source_match  = 1.0 if doc source in expected_sources, else 0.0
+                      (1.0 when no source constraint)
+
+    Final relevance = keyword_score * 0.6 + source_match * 0.4
+    This means a doc must match *both* keywords and source well to score
+    near 1.0.  A doc matching all keywords but wrong source scores 0.6;
+    right source but no keywords scores 0.4; partial keywords + right
+    source scores proportionally.
+
+    "Fully relevant" threshold for hit/precision is rel >= 0.8 (was 1.0).
+    """
     relevances = []
     for doc in docs:
-        text = (doc.page_content or "").lower()
+        text = doc.page_content or ""
         source = doc.metadata.get("source")
 
-        keyword_match = (
-            not expected_keywords
-            or any(kw.lower() in text for kw in expected_keywords)
-        )
+        kw_score = _keyword_fraction(text, expected_keywords or [])
+
         source_match = (
-            not expected_sources
-            or (source and source in expected_sources)
+            1.0 if (
+                not expected_sources
+                or (source and source in expected_sources)
+            ) else 0.0
         )
 
-        if keyword_match and source_match:
-            relevances.append(1.0)
-        elif keyword_match or source_match:
-            relevances.append(0.5)
-        else:
-            relevances.append(0.0)
+        rel = kw_score * 0.6 + source_match * 0.4
+        relevances.append(round(rel, 4))
     return relevances
+
+
+# Threshold above which a document is considered "relevant" for hit/precision.
+RELEVANT_THRESHOLD = 0.8
 
 
 def _evaluate_question(
@@ -383,22 +417,36 @@ def _evaluate_question(
     """Evaluate a single question's retrieval results. Returns per-question metrics."""
     relevances = _question_relevance(docs, expected_keywords, expected_sources)
 
-    # Hit: at least one fully relevant doc in top-k
+    # Hit: at least one relevant doc (>= threshold) in top-k
     first_hit_rank = None
     for rank, rel in enumerate(relevances, start=1):
-        if rel >= 1.0:
+        if rel >= RELEVANT_THRESHOLD:
             first_hit_rank = rank
             break
 
     hit = first_hit_rank is not None
     reciprocal_rank = (1.0 / first_hit_rank) if first_hit_rank else 0.0
 
-    # Precision@k: fraction of top-k that are fully relevant
-    fully_relevant = sum(1 for r in relevances if r >= 1.0)
+    # Precision@k: fraction of top-k that are relevant
+    fully_relevant = sum(1 for r in relevances if r >= RELEVANT_THRESHOLD)
     precision_at_k = fully_relevant / k if k > 0 else 0.0
 
+    # Recall@k: fraction of expected sources represented in relevant results
+    relevant_sources = set()
+    for doc, rel in zip(docs, relevances):
+        if rel >= RELEVANT_THRESHOLD:
+            src = doc.metadata.get("source")
+            if src:
+                relevant_sources.add(src)
+    if expected_sources:
+        recall_at_k = len(relevant_sources & set(expected_sources)) / len(expected_sources)
+    else:
+        recall_at_k = 1.0 if fully_relevant > 0 else 0.0
+
     # Partial relevance counts
-    partially_relevant = sum(1 for r in relevances if 0 < r < 1.0)
+    partially_relevant = sum(
+        1 for r in relevances if 0 < r < RELEVANT_THRESHOLD
+    )
 
     # NDCG@k
     ndcg_at_k = _ndcg(relevances, k)
@@ -414,6 +462,7 @@ def _evaluate_question(
         "first_hit_rank": first_hit_rank,
         "reciprocal_rank": reciprocal_rank,
         "precision_at_k": precision_at_k,
+        "recall_at_k": recall_at_k,
         "ndcg_at_k": ndcg_at_k,
         "fully_relevant": fully_relevant,
         "partially_relevant": partially_relevant,
@@ -503,6 +552,13 @@ def run_eval(
 
     retriever = _load_retriever(k=max(max(k_values), k), metadata_filter=metadata_filter)
 
+    # Warmup: run one retrieval to amortise cold-start costs (model loading,
+    # Chroma cache priming) so that latency stats reflect steady-state performance.
+    try:
+        retriever.invoke("warmup query")
+    except Exception:
+        pass
+
     # Per-question results at the primary k
     per_question: list[dict] = []
     latencies: list[float] = []
@@ -541,7 +597,7 @@ def run_eval(
 
         result_entry = {
             "id": qid,
-            "query": query[:80] + "..." if len(query) > 80 else query,
+            "query": query,
             "category": category,
             "difficulty": difficulty,
             "latency_ms": round(latency_ms, 1),
@@ -568,6 +624,7 @@ def run_eval(
     hit_rate = hits / n if n else 0.0
     mrr = sum(r["reciprocal_rank"] for r in per_question) / n if n else 0.0
     avg_precision = sum(r["precision_at_k"] for r in per_question) / n if n else 0.0
+    avg_recall = sum(r["recall_at_k"] for r in per_question) / n if n else 0.0
     avg_ndcg = sum(r["ndcg_at_k"] for r in per_question) / n if n else 0.0
 
     # ---- Multi-k sweep ----
@@ -576,6 +633,7 @@ def run_eval(
         kv_hits = 0
         kv_rrs = []
         kv_precisions = []
+        kv_recalls = []
         kv_ndcgs = []
         for i, q in enumerate(questions):
             qid = q.get("id", "?")
@@ -589,6 +647,7 @@ def run_eval(
                 kv_hits += 1
             kv_rrs.append(ev["reciprocal_rank"])
             kv_precisions.append(ev["precision_at_k"])
+            kv_recalls.append(ev["recall_at_k"])
             kv_ndcgs.append(ev["ndcg_at_k"])
 
         multi_k_metrics[kv] = {
@@ -596,6 +655,7 @@ def run_eval(
             "hit_rate": kv_hits / n if n else 0.0,
             "mrr": sum(kv_rrs) / n if n else 0.0,
             "avg_precision_at_k": sum(kv_precisions) / n if n else 0.0,
+            "avg_recall_at_k": sum(kv_recalls) / n if n else 0.0,
             "avg_ndcg_at_k": sum(kv_ndcgs) / n if n else 0.0,
         }
 
@@ -609,6 +669,7 @@ def run_eval(
                 "hit_rate": sum(1 for r in items if r["hit"]) / n_g if n_g else 0.0,
                 "mrr": sum(r["reciprocal_rank"] for r in items) / n_g if n_g else 0.0,
                 "avg_precision_at_k": sum(r["precision_at_k"] for r in items) / n_g if n_g else 0.0,
+                "avg_recall_at_k": sum(r["recall_at_k"] for r in items) / n_g if n_g else 0.0,
                 "avg_ndcg_at_k": sum(r["ndcg_at_k"] for r in items) / n_g if n_g else 0.0,
             }
         return out
@@ -648,6 +709,7 @@ def run_eval(
         "hits": hits,
         "mrr": mrr,
         "avg_precision_at_k": avg_precision,
+        "avg_recall_at_k": avg_recall,
         "avg_ndcg_at_k": avg_ndcg,
         "latency": latency_stats,
         "by_category": by_category,
@@ -679,6 +741,7 @@ def _format_report(metrics: dict) -> list[str]:
     )
     lines.append(f"MRR: {metrics['mrr']:.4f}")
     lines.append(f"Avg Precision@{k}: {metrics['avg_precision_at_k']:.4f}")
+    lines.append(f"Avg Recall@{k}: {metrics['avg_recall_at_k']:.4f}")
     lines.append(f"Avg NDCG@{k}: {metrics['avg_ndcg_at_k']:.4f}")
 
     # Latency
@@ -697,7 +760,7 @@ def _format_report(metrics: dict) -> list[str]:
         lines.append(
             f"  {cat:30s}  n={m['n']:2d}  hit={m['hit_rate']:.0%}  "
             f"mrr={m['mrr']:.3f}  p@k={m['avg_precision_at_k']:.3f}  "
-            f"ndcg={m['avg_ndcg_at_k']:.3f}"
+            f"r@k={m['avg_recall_at_k']:.3f}  ndcg={m['avg_ndcg_at_k']:.3f}"
         )
 
     # Difficulty breakdown
@@ -707,7 +770,7 @@ def _format_report(metrics: dict) -> list[str]:
         lines.append(
             f"  {diff:10s}  n={m['n']:2d}  hit={m['hit_rate']:.0%}  "
             f"mrr={m['mrr']:.3f}  p@k={m['avg_precision_at_k']:.3f}  "
-            f"ndcg={m['avg_ndcg_at_k']:.3f}"
+            f"r@k={m['avg_recall_at_k']:.3f}  ndcg={m['avg_ndcg_at_k']:.3f}"
         )
 
     # Expected source breakdown
@@ -717,7 +780,7 @@ def _format_report(metrics: dict) -> list[str]:
         lines.append(
             f"  {src:10s}  n={m['n']:2d}  hit={m['hit_rate']:.0%}  "
             f"mrr={m['mrr']:.3f}  p@k={m['avg_precision_at_k']:.3f}  "
-            f"ndcg={m['avg_ndcg_at_k']:.3f}"
+            f"r@k={m['avg_recall_at_k']:.3f}  ndcg={m['avg_ndcg_at_k']:.3f}"
         )
 
     # Consistency
@@ -736,7 +799,8 @@ def _format_report(metrics: dict) -> list[str]:
         for kv, m in sorted(multi_k.items()):
             lines.append(
                 f"  k={kv:3d}  hit={m['hit_rate']:.0%}  mrr={m['mrr']:.3f}  "
-                f"p@k={m['avg_precision_at_k']:.3f}  ndcg={m['avg_ndcg_at_k']:.3f}"
+                f"p@k={m['avg_precision_at_k']:.3f}  r@k={m['avg_recall_at_k']:.3f}  "
+                f"ndcg={m['avg_ndcg_at_k']:.3f}"
             )
 
     # Per-question results
@@ -810,6 +874,7 @@ def _build_markdown_report(
             f"| Hit rate | {metrics['hits']}/{n} ({metrics['hit_rate'] * 100:.1f}%) |",
             f"| MRR | {metrics['mrr']:.4f} |",
             f"| Avg Precision@{k} | {metrics['avg_precision_at_k']:.4f} |",
+            f"| Avg Recall@{k} | {metrics['avg_recall_at_k']:.4f} |",
             f"| Avg NDCG@{k} | {metrics['avg_ndcg_at_k']:.4f} |",
             "",
         ])
@@ -826,13 +891,14 @@ def _build_markdown_report(
             parts.extend([
                 "### By category",
                 "",
-                "| Category | n | Hit rate | MRR | P@k | NDCG@k |",
-                "|----------|---|----------|-----|-----|--------|",
+                "| Category | n | Hit rate | MRR | P@k | R@k | NDCG@k |",
+                "|----------|---|----------|-----|-----|-----|--------|",
             ])
             for cat, m in sorted(by_cat.items()):
                 parts.append(
                     f"| {cat} | {m['n']} | {m['hit_rate']:.0%} | {m['mrr']:.3f} | "
-                    f"{m['avg_precision_at_k']:.3f} | {m['avg_ndcg_at_k']:.3f} |"
+                    f"{m['avg_precision_at_k']:.3f} | {m['avg_recall_at_k']:.3f} | "
+                    f"{m['avg_ndcg_at_k']:.3f} |"
                 )
             parts.append("")
         by_diff = metrics.get("by_difficulty", {})
@@ -840,13 +906,14 @@ def _build_markdown_report(
             parts.extend([
                 "### By difficulty",
                 "",
-                "| Difficulty | n | Hit rate | MRR | P@k | NDCG@k |",
-                "|------------|---|----------|-----|-----|--------|",
+                "| Difficulty | n | Hit rate | MRR | P@k | R@k | NDCG@k |",
+                "|------------|---|----------|-----|-----|-----|--------|",
             ])
             for diff, m in sorted(by_diff.items()):
                 parts.append(
                     f"| {diff} | {m['n']} | {m['hit_rate']:.0%} | {m['mrr']:.3f} | "
-                    f"{m['avg_precision_at_k']:.3f} | {m['avg_ndcg_at_k']:.3f} |"
+                    f"{m['avg_precision_at_k']:.3f} | {m['avg_recall_at_k']:.3f} | "
+                    f"{m['avg_ndcg_at_k']:.3f} |"
                 )
             parts.append("")
         by_src = metrics.get("by_expected_source", {})
@@ -854,13 +921,14 @@ def _build_markdown_report(
             parts.extend([
                 "### By expected source",
                 "",
-                "| Source | n | Hit rate | MRR | P@k | NDCG@k |",
-                "|--------|---|----------|-----|-----|--------|",
+                "| Source | n | Hit rate | MRR | P@k | R@k | NDCG@k |",
+                "|--------|---|----------|-----|-----|-----|--------|",
             ])
             for src, m in sorted(by_src.items()):
                 parts.append(
                     f"| {src} | {m['n']} | {m['hit_rate']:.0%} | {m['mrr']:.3f} | "
-                    f"{m['avg_precision_at_k']:.3f} | {m['avg_ndcg_at_k']:.3f} |"
+                    f"{m['avg_precision_at_k']:.3f} | {m['avg_recall_at_k']:.3f} | "
+                    f"{m['avg_ndcg_at_k']:.3f} |"
                 )
             parts.append("")
         consistency = metrics.get("consistency", {})
@@ -872,7 +940,7 @@ def _build_markdown_report(
         parts.extend([
             "### Per-question results",
             "",
-            "| Status | Question | P@k | NDCG@k | Rank | Category | Difficulty |",
+            "| Status | Question ID | P@k | NDCG@k | Rank | Category | Difficulty |",
             "|--------|----------|-----|--------|------|----------|------------|",
         ])
         for r in metrics["results"]:
