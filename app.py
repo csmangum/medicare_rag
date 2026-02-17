@@ -6,6 +6,7 @@ Launch:
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -37,6 +38,10 @@ def _load_store():
     return get_or_create_chroma(emb)
 
 
+# Batch size for metadata fetch; SQLite has a limit on SQL variables (~999).
+_META_BATCH_SIZE = 500
+
+
 @st.cache_data(show_spinner=False, ttl=300)
 def _get_collection_meta(_store) -> dict[str, Any]:
     """Gather metadata stats from the Chroma collection for filter options.
@@ -44,6 +49,7 @@ def _get_collection_meta(_store) -> dict[str, Any]:
     Cached for 5 minutes to avoid reloading all metadata on every rerun.
     Cache will automatically invalidate after TTL expires, allowing new documents
     to appear in filters.
+    Fetches metadata in batches to avoid ChromaDB/SQLite "too many SQL variables" error.
     
     Args:
         _store: Chroma vector store. Underscore prefix follows Streamlit convention
@@ -54,22 +60,28 @@ def _get_collection_meta(_store) -> dict[str, Any]:
     if count == 0:
         return {"count": 0, "sources": [], "manuals": [], "jurisdictions": []}
 
-    all_meta = collection.get(include=["metadatas"])
-    metadatas = all_meta.get("metadatas") or []
-
     sources: set[str] = set()
     manuals: set[str] = set()
     jurisdictions: set[str] = set()
 
-    for m in metadatas:
-        if not m:
-            continue
-        if m.get("source"):
-            sources.add(str(m["source"]))
-        if m.get("manual"):
-            manuals.add(str(m["manual"]))
-        if m.get("jurisdiction"):
-            jurisdictions.add(str(m["jurisdiction"]))
+    offset = 0
+    while offset < count:
+        batch = collection.get(
+            include=["metadatas"],
+            limit=_META_BATCH_SIZE,
+            offset=offset,
+        )
+        metadatas = batch.get("metadatas") or []
+        offset += len(metadatas)
+        for m in metadatas:
+            if not m:
+                continue
+            if m.get("source"):
+                sources.add(str(m["source"]))
+            if m.get("manual"):
+                manuals.add(str(m["manual"]))
+            if m.get("jurisdiction"):
+                jurisdictions.add(str(m["jurisdiction"]))
 
     return {
         "count": count,
@@ -244,6 +256,24 @@ def _escape(text: str) -> str:
     )
 
 
+def _get_embedding_dimensions(store, embeddings) -> tuple[int | None, int]:
+    """Return (collection_embedding_dim, current_model_dim).
+    collection_embedding_dim is None if the collection is empty.
+    """
+    collection = store._collection
+    model_dim: int = len(embeddings.embed_query("x"))
+    try:
+        sample = collection.get(limit=1, include=["embeddings"])
+        embs = sample.get("embeddings") if sample else None
+        if embs and len(embs) > 0 and embs[0] is not None:
+            emb = embs[0]
+            coll_dim = int(getattr(emb, "size", len(emb)))
+            return (coll_dim, model_dim)
+    except Exception:
+        pass
+    return (None, model_dim)
+
+
 # ---------------------------------------------------------------------------
 # Main app
 # ---------------------------------------------------------------------------
@@ -256,8 +286,16 @@ def main() -> None:
         st.header("Search Settings")
 
         store = _load_store()
+        embeddings = _load_embeddings()
         meta_info = _get_collection_meta(store)
         doc_count = meta_info["count"]
+
+        coll_dim, model_dim = _get_embedding_dimensions(store, embeddings)
+        dimension_mismatch = (
+            doc_count > 0
+            and coll_dim is not None
+            and coll_dim != model_dim
+        )
 
         st.caption(f"Collection: **{COLLECTION_NAME}**")
         st.caption(f"Documents indexed: **{doc_count:,}**")
@@ -267,6 +305,8 @@ def main() -> None:
 
         if doc_count == 0:
             st.warning("Index is empty. Run ingestion first (`scripts/ingest_all.py`).")
+        elif dimension_mismatch:
+            st.error(f"Embedding dimension mismatch: index={coll_dim}, model={model_dim}")
 
         # -- Filters --
         st.subheader("Filters")
@@ -321,25 +361,51 @@ def main() -> None:
         key="search_input",
     )
 
-    if query and doc_count > 0:
+    if query and dimension_mismatch:
+        st.error(
+            "**Embedding dimension mismatch.** The index was built with a different "
+            "embedding model (expected dimension **{}**). The current model "
+            "(`{}`) produces dimension **{}**. Either set `EMBEDDING_MODEL` in `.env` "
+            "to the model used during ingest (e.g. one that outputs {}‑dim vectors), "
+            "or re-run ingestion with the current model: `python scripts/ingest_all.py`."
+            .format(coll_dim, EMBEDDING_MODEL, model_dim, coll_dim)
+        )
+    elif query and doc_count > 0:
         metadata_filter = _build_metadata_filter(
             source_filter or "All",
             manual_filter or "All",
             jurisdiction_filter or "All",
         )
 
-        with st.spinner("Searching embeddings..."):
-            t0 = time.perf_counter()
-            results = _run_search(store, query, k, metadata_filter, score_threshold)
-            elapsed = time.perf_counter() - t0
+        try:
+            with st.spinner("Searching embeddings..."):
+                t0 = time.perf_counter()
+                results = _run_search(store, query, k, metadata_filter, score_threshold)
+                elapsed = time.perf_counter() - t0
 
-        st.markdown(f"**{len(results)}** results in **{elapsed:.3f}s**")
+            st.markdown(f"**{len(results)}** results in **{elapsed:.3f}s**")
 
-        if not results:
-            st.info("No results matched your query and filters. Try broadening your search or adjusting filters.")
-        else:
-            for rank, (doc, score) in enumerate(results, start=1):
-                _render_result_card(rank, doc, score, show_full_content)
+            if not results:
+                st.info("No results matched your query and filters. Try broadening your search or adjusting filters.")
+            else:
+                for rank, (doc, score) in enumerate(results, start=1):
+                    _render_result_card(rank, doc, score, show_full_content)
+        except Exception as e:  # noqa: BLE001
+            err_msg = str(e)
+            # ChromaDB raises InvalidArgumentError when embedding dimensions don't match
+            match = re.search(r"dimension of (\d+), got (\d+)", err_msg, re.IGNORECASE)
+            if match:
+                expected_dim, got_dim = int(match.group(1)), int(match.group(2))
+                st.error(
+                    "**Embedding dimension mismatch.** The index was built with a different "
+                    "embedding model (expected dimension **{}**). The current model "
+                    "(`{}`) produces dimension **{}**. Either set `EMBEDDING_MODEL` in `.env` "
+                    "to the model used during ingest (e.g. one that outputs {}‑dim vectors), "
+                    "or re-run ingestion with the current model: `python scripts/ingest_all.py`."
+                    .format(expected_dim, EMBEDDING_MODEL, got_dim, expected_dim)
+                )
+            else:
+                raise
 
     elif query and doc_count == 0:
         st.error("Cannot search: the index is empty. Please run ingestion first.")

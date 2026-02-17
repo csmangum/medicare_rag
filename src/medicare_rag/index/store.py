@@ -12,6 +12,8 @@ from medicare_rag.config import CHROMA_DIR, COLLECTION_NAME
 
 # Chroma client enforces a max batch size (~5461); stay under it
 CHROMA_UPSERT_BATCH_SIZE = 5000
+# Batch size for get(include=["metadatas"]); SQLite has a limit on SQL variables (~999)
+GET_META_BATCH_SIZE = 500
 
 
 # Chroma allows str, int, float, bool in metadata
@@ -64,19 +66,26 @@ def upsert_documents(
     if not documents:
         return 0, 0
 
-    # We use the LangChain Chroma wrapper's _collection for bulk get(include=["metadatas"])
-    # and upsert() to support incremental indexing by content_hash. Full-collection get()
-    # loads all ids/metadatas into memory; for very large corpora, consider batch get by
-    # chunk ids or a side index.
+    # We use the LangChain Chroma wrapper's _collection for batched get(include=["metadatas"])
+    # and upsert() to support incremental indexing by content_hash. Batched get avoids
+    # SQLite "too many SQL variables" when the collection is large.
     collection = store._collection
-    # Existing ids -> content_hash
-    existing = collection.get(include=["metadatas"])
-    id_to_hash = {}
-    if existing and existing.get("ids"):
-        metadatas_list = existing.get("metadatas") or []
-        for i, id_ in enumerate(existing["ids"]):
+    id_to_hash: dict[str, str] = {}
+    offset = 0
+    while True:
+        batch = collection.get(
+            include=["metadatas"],
+            limit=GET_META_BATCH_SIZE,
+            offset=offset,
+        )
+        ids_batch = batch.get("ids") or []
+        metadatas_list = batch.get("metadatas") or []
+        for i, id_ in enumerate(ids_batch):
             meta = (metadatas_list[i] if i < len(metadatas_list) else None) or {}
             id_to_hash[id_] = meta.get("content_hash", "")
+        if len(ids_batch) < GET_META_BATCH_SIZE:
+            break
+        offset += len(ids_batch)
 
     to_upsert: list[Document] = []
     for doc in documents:
