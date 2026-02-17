@@ -107,7 +107,7 @@ def _extract_pdf_page_unstructured(pdf_path: Path) -> str:
                 texts.append(str(el))
         full = "\n".join(texts)
         return full.strip()
-    except (ImportError, OSError) as e:
+    except Exception as e:
         logger.debug("Unstructured fallback failed for %s: %s", pdf_path, e)
         return ""
 
@@ -488,7 +488,7 @@ def extract_icd10cm(processed_dir: Path, raw_dir: Path, *, force: bool = False) 
                     )
                     txt_path, meta_path = _write_doc(processed_dir, "codes/icd10cm", doc_id, content, meta)
                     written.append((txt_path, meta_path))
-        except (zipfile.BadZipFile, ET.ParseError, OSError) as e:
+        except (zipfile.BadZipFile, ET.ParseError, OSError, ValueError) as e:
             logger.warning("ICD-10-CM %s: %s", zip_path, e)
     return written
 

@@ -3,6 +3,7 @@
 Default DATA_DIR is best when running from repo root or with an editable install.
 """
 import logging
+import math
 import os
 from pathlib import Path
 
@@ -29,7 +30,11 @@ def _safe_float(key: str, default: float) -> float:
     if raw is None:
         return default
     try:
-        return float(raw)
+        val = float(raw)
+        if math.isnan(val) or math.isinf(val):
+            logger.warning("Invalid %s=%r (non-finite), using default %s", key, raw, default)
+            return default
+        return val
     except ValueError:
         logger.warning("Invalid %s=%r, using default %s", key, raw, default)
         return default
