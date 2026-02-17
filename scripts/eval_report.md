@@ -68,8 +68,8 @@
 
 ### Per-question results
 
-| Status | Question | P@k | NDCG@k | Rank | Category | Difficulty |
-|--------|----------|-----|--------|------|----------|------------|
+| Status | Question ID | P@k | NDCG@k | Rank | Category | Difficulty |
+|--------|-------------|-----|--------|------|----------|------------|
 | PASS | iom_part_b_coverage | 1.00 | 1.00 | 1 | policy_coverage | easy |
 | PASS | iom_part_a_inpatient | 1.00 | 1.00 | 1 | policy_coverage | easy |
 | PASS | iom_skilled_nursing | 1.00 | 1.00 | 1 | policy_coverage | medium |

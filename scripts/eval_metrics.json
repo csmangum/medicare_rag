@@ -5,7 +5,7 @@
       {
         "name": "chroma_dir_exists",
         "passed": true,
-        "detail": "/workspace/data/chroma"
+        "detail": "data/chroma (/workspace/data/chroma)"
       },
       {
         "name": "collection_accessible",
@@ -402,7 +402,7 @@
       },
       {
         "id": "iom_skilled_nursing",
-        "query": "What are the coverage requirements for skilled nursing facility services under M...",
+        "query": "What are the coverage requirements for skilled nursing facility services under Medicare?",
         "category": "policy_coverage",
         "difficulty": "medium",
         "latency_ms": 6.7,
@@ -625,7 +625,7 @@
       },
       {
         "id": "modifier_25",
-        "query": "What is modifier 25 and when is it appropriate to use for evaluation and managem...",
+        "query": "What is modifier 25 and when is it appropriate to use for evaluation and management services?",
         "category": "coding_modifiers",
         "difficulty": "medium",
         "latency_ms": 7.1,
@@ -642,7 +642,7 @@
       },
       {
         "id": "modifier_26_tc",
-        "query": "What is the difference between modifier 26 and modifier TC for professional and ...",
+        "query": "What is the difference between modifier 26 and modifier TC for professional and technical components?",
         "category": "coding_modifiers",
         "difficulty": "medium",
         "latency_ms": 6.8,
@@ -1252,7 +1252,7 @@
       },
       {
         "id": "edge_multi_concept",
-        "query": "Medicare Part B outpatient cardiac rehabilitation billing with modifier 59 for d...",
+        "query": "Medicare Part B outpatient cardiac rehabilitation billing with modifier 59 for distinct procedural service",
         "category": "edge_case",
         "difficulty": "hard",
         "latency_ms": 6.5,
