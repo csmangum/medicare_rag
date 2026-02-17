@@ -6,62 +6,48 @@ This document describes the high-level architecture, data flow, component design
 
 Medicare RAG is a four-phase Retrieval-Augmented Generation pipeline for Medicare Revenue Cycle Management. It downloads authoritative CMS data, transforms it into searchable vector embeddings, and answers natural-language questions with cited sources. The entire system runs locally with no external API keys.
 
-```
- ┌──────────────────────────────────────────────────────────────────┐
- │                        User Interfaces                          │
- │  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────┐  │
- │  │  CLI REPL        │  │  Streamlit App   │  │  Eval Scripts │  │
- │  │  (scripts/       │  │  (app.py)        │  │  (scripts/    │  │
- │  │   query.py)      │  │                  │  │   validate_   │  │
- │  │                  │  │                  │  │   and_eval.py)│  │
- │  └───────┬─────────┘  └────────┬─────────┘  └──────┬────────┘  │
- └──────────┼──────────────────────┼───────────────────┼───────────┘
-            │                      │                   │
-            ▼                      ▼                   ▼
- ┌──────────────────────────────────────────────────────────────────┐
- │                    Phase 4: Query & RAG                          │
- │  ┌─────────────────────┐    ┌───────────────────────────────┐   │
- │  │  retriever.py        │    │  chain.py                     │   │
- │  │  (Chroma similarity  │───▶│  (prompt + local LLM +        │   │
- │  │   search, metadata   │    │   cited answer generation)    │   │
- │  │   filters, top-k)    │    │                               │   │
- │  └──────────┬───────────┘    └───────────────────────────────┘   │
- └─────────────┼────────────────────────────────────────────────────┘
-               │
-               ▼
- ┌──────────────────────────────────────────────────────────────────┐
- │                  Phase 3: Index (Vector Store)                   │
- │  ┌─────────────────────┐    ┌───────────────────────────────┐   │
- │  │  embed.py            │    │  store.py                     │   │
- │  │  (sentence-           │    │  (ChromaDB upsert, content   │   │
- │  │   transformers)      │    │   hash dedup, batch ops)     │   │
- │  └──────────────────────┘    └───────────────────────────────┘   │
- └──────────────────────────────────────────────────────────────────┘
-               ▲
-               │
- ┌──────────────────────────────────────────────────────────────────┐
- │                Phase 2: Ingest (Extract & Chunk)                 │
- │  ┌─────────────────────┐    ┌───────────────────────────────┐   │
- │  │  extract.py          │    │  chunk.py                     │   │
- │  │  (PDF, CSV, XML,     │    │  (RecursiveCharacterText-     │   │
- │  │   HTML → plain text  │    │   Splitter, metadata-aware)   │   │
- │  │   + metadata)        │    │                               │   │
- │  └──────────────────────┘    └───────────────────────────────┘   │
- └──────────────────────────────────────────────────────────────────┘
-               ▲
-               │
- ┌──────────────────────────────────────────────────────────────────┐
- │                   Phase 1: Download                              │
- │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────────┐  │
- │  │  iom.py   │  │  mcd.py   │  │  codes.py │  │  _manifest.py │  │
- │  │  (PDF     │  │  (ZIP     │  │  (HCPCS,  │  │  (SHA-256,    │  │
- │  │   scraper)│  │   stream) │  │   ICD-10) │  │   idempotency)│  │
- │  └──────────┘  └──────────┘  └──────────┘  └────────────────┘  │
- └──────────────────────────────────────────────────────────────────┘
-               ▲
-               │
-        CMS.gov, CDC.gov
-        (Internet-Only Manuals, MCD bulk data, HCPCS/ICD code files)
+```mermaid
+flowchart TB
+  subgraph UI["User Interfaces"]
+    CLI["CLI REPL\n(scripts/query.py)"]
+    Streamlit["Streamlit App\n(app.py)"]
+    Eval["Eval Scripts\n(scripts/validate_and_eval.py)"]
+  end
+
+  subgraph P4["Phase 4: Query & RAG"]
+    Retriever["retriever.py\n(Chroma similarity search,\nmetadata filters, top-k)"]
+    Chain["chain.py\n(prompt + local LLM +\ncited answer generation)"]
+    Retriever --> Chain
+  end
+
+  subgraph P3["Phase 3: Index (Vector Store)"]
+    Embed["embed.py\n(sentence-transformers)"]
+    Store["store.py\n(ChromaDB upsert, content\nhash dedup, batch ops)"]
+    Embed --> Store
+  end
+
+  subgraph P2["Phase 2: Ingest (Extract & Chunk)"]
+    Extract["extract.py\n(PDF, CSV, XML, HTML → plain text + metadata)"]
+    Chunk["chunk.py\n(RecursiveCharacterTextSplitter,\nmetadata-aware)"]
+    Extract --> Chunk
+  end
+
+  subgraph P1["Phase 1: Download"]
+    IOM["iom.py\n(PDF scraper)"]
+    MCD["mcd.py\n(ZIP stream)"]
+    Codes["codes.py\n(HCPCS, ICD-10)"]
+    Manifest["_manifest.py\n(SHA-256, idempotency)"]
+  end
+
+  Sources["CMS.gov, CDC.gov\n(Internet-Only Manuals, MCD bulk data, HCPCS/ICD code files)"]
+
+  CLI --> P4
+  Streamlit --> P4
+  Eval --> P4
+  P4 --> P3
+  P3 --> P2
+  P2 --> P1
+  P1 --> Sources
 ```
 
 ## Data Flow
@@ -72,24 +58,35 @@ The pipeline processes data through four sequential phases. Each phase is idempo
 
 External CMS and CDC sources are downloaded into `data/raw/` with manifest-based idempotency.
 
-```
-CMS.gov ──┐
-           │  httpx (streaming)
-CDC.gov ──┤  ──────────────────▶  data/raw/
-           │                         ├── iom/
-           │                         │   ├── 100-02/  (chapter PDFs)
-           │                         │   ├── 100-03/  (chapter PDFs)
-           │                         │   ├── 100-04/  (chapter PDFs)
-           │                         │   └── manifest.json
-           │                         ├── mcd/
-           │                         │   ├── current_lcd.zip
-           │                         │   ├── ncd.zip
-           │                         │   ├── ...
-           │                         │   └── manifest.json
-           │                         └── codes/
-           │                             ├── hcpcs/ (ZIP)
-           │                             ├── icd10-cm/ (optional ZIP)
-           │                             └── manifest.json
+```mermaid
+flowchart LR
+  CMS["CMS.gov"]
+  CDC["CDC.gov"]
+  HTTP["httpx (streaming)"]
+
+  subgraph Raw["data/raw/"]
+    subgraph IOM["iom/"]
+      IOM1["100-02/ (chapter PDFs)"]
+      IOM2["100-03/ (chapter PDFs)"]
+      IOM3["100-04/ (chapter PDFs)"]
+      IOM4["manifest.json"]
+    end
+    subgraph MCD["mcd/"]
+      MCD1["current_lcd.zip"]
+      MCD2["ncd.zip"]
+      MCD3["..."]
+      MCD4["manifest.json"]
+    end
+    subgraph Codes["codes/"]
+      C1["hcpcs/ (ZIP)"]
+      C2["icd10-cm/ (optional ZIP)"]
+      C3["manifest.json"]
+    end
+  end
+
+  CMS --> HTTP
+  CDC --> HTTP
+  HTTP --> Raw
 ```
 
 **Three data sources:**
@@ -111,26 +108,31 @@ CDC.gov ──┤  ──────────────────▶  da
 
 Raw files are extracted into plain text with structured metadata, then chunked into LangChain `Document` objects.
 
-```
-data/raw/              extract.py            data/processed/
-  ├── iom/   ──────────────────────────▶       ├── iom/
-  │   └── *.pdf        (pdfplumber +           │   └── {manual}/{chapter}.txt
-  │                     unstructured              │       + .meta.json
-  │                     fallback)              │
-  ├── mcd/   ──────────────────────────▶       ├── mcd/
-  │   └── *.zip→*.csv  (CSV parse,            │   └── {lcd|ncd|article}/{id}.txt
-  │                     HTML strip)            │       + .meta.json
-  └── codes/ ──────────────────────────▶       └── codes/
-      ├── hcpcs/       (fixed-width            ├── hcpcs/{code}.txt
-      │                 320-char parse)        │   + .meta.json
-      └── icd10-cm/    (XML parse)             └── icd10cm/{code}.txt
-                                                   + .meta.json
+```mermaid
+flowchart LR
+  subgraph Raw["data/raw/"]
+    RawIOM["iom/*.pdf"]
+    RawMCD["mcd/*.zip→*.csv"]
+    RawCodes["codes/hcpcs, icd10-cm"]
+  end
 
-data/processed/        chunk.py              List[Document]
-  └── **/*.txt   ──────────────────────▶     (page_content + metadata)
-      + .meta.json     RecursiveCharacter-
-                       TextSplitter
-                       (1000 chars, 200 overlap)
+  Extract["extract.py\n(pdfplumber + unstructured fallback,\nCSV parse, fixed-width, XML)"]
+
+  subgraph Processed["data/processed/"]
+    P1["iom/{manual}/{chapter}.txt + .meta.json"]
+    P2["mcd/{lcd|ncd|article}/{id}.txt + .meta.json"]
+    P3["codes/hcpcs/{code}.txt, icd10cm/{code}.txt + .meta.json"]
+  end
+
+  RawIOM --> Extract
+  RawMCD --> Extract
+  RawCodes --> Extract
+  Extract --> P1
+  Extract --> P2
+  Extract --> P3
+
+  Processed --> Chunk["chunk.py\nRecursiveCharacterTextSplitter\n(1000 chars, 200 overlap)"]
+  Chunk --> Docs["List[Document]\n(page_content + metadata)"]
 ```
 
 **Extraction strategies by source type:**
@@ -158,13 +160,14 @@ data/processed/        chunk.py              List[Document]
 
 Chunked documents are embedded and stored in a local ChromaDB vector store with incremental upsert logic.
 
-```
-List[Document]      embed.py            store.py              ChromaDB
-  (chunks)    ──▶  HuggingFace    ──▶  content-hash     ──▶  data/chroma/
-                   Embeddings          dedup + batch          collection:
-                   (all-MiniLM-        upsert                 "medicare_rag"
-                    L6-v2,
-                    384-dim)
+```mermaid
+flowchart LR
+  Docs["List[Document]\n(chunks)"]
+  Embed["embed.py\nHuggingFace Embeddings\n(all-MiniLM-L6-v2, 384-dim)"]
+  Store["store.py\ncontent-hash dedup + batch upsert"]
+  Chroma["ChromaDB\ndata/chroma/\ncollection: medicare_rag"]
+
+  Docs --> Embed --> Store --> Chroma
 ```
 
 **Embedding model:** `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions) by default, configurable via `EMBEDDING_MODEL` env var. Uses `langchain_huggingface.HuggingFaceEmbeddings` wrapper for LangChain compatibility.
@@ -182,24 +185,15 @@ List[Document]      embed.py            store.py              ChromaDB
 
 The retrieval and generation layer connects ChromaDB similarity search to a local LLM.
 
-```
-User Question
-      │
-      ▼
-┌─────────────┐     ┌──────────────────┐     ┌───────────────────────┐
-│  Retriever   │────▶│  Context Builder  │────▶│  LLM (TinyLlama)     │
-│  (Chroma     │     │  [1] chunk_1      │     │                       │
-│   top-k=8,   │     │  [2] chunk_2      │     │  System: "You are a   │
-│   metadata   │     │  ...              │     │   Medicare RCM         │
-│   filters)   │     │  [k] chunk_k      │     │   assistant..."       │
-└─────────────┘     └──────────────────┘     │                       │
-                                              │  Human: context +     │
-                                              │   question            │
-                                              └───────────┬───────────┘
-                                                          │
-                                                          ▼
-                                               Answer with [1][2]...
-                                               citations + source docs
+```mermaid
+flowchart LR
+  Q["User Question"]
+  Retriever["Retriever\n(Chroma top-k=8,\nmetadata filters)"]
+  Context["Context Builder\n[1] chunk_1\n[2] chunk_2 ... [k] chunk_k"]
+  LLM["LLM (TinyLlama)\nSystem: Medicare RCM assistant\nHuman: context + question"]
+  Answer["Answer with [1][2]...\ncitations + source docs"]
+
+  Q --> Retriever --> Context --> LLM --> Answer
 ```
 
 **Retriever:** `langchain_chroma.Chroma.as_retriever()` with configurable `k` (default 8) and optional metadata filter (Chroma `where` clause). Supports filtering by `source`, `manual`, `jurisdiction`, and combinations via `$and`.
@@ -221,29 +215,39 @@ User Question
 
 ### Package Structure
 
-```
-src/medicare_rag/
-├── __init__.py              # Package root
-├── config.py                # Centralized configuration (env vars + defaults)
-├── download/                # Phase 1
-│   ├── __init__.py          # Re-exports: download_iom, download_mcd, download_codes
-│   ├── iom.py               # IOM PDF chapter scraper
-│   ├── mcd.py               # MCD bulk ZIP downloader + safe extractor
-│   ├── codes.py             # HCPCS + ICD-10-CM downloader
-│   ├── _manifest.py         # Manifest writing + SHA-256 hashing
-│   └── _utils.py            # URL sanitization, shared timeout constant
-├── ingest/                  # Phase 2
-│   ├── __init__.py
-│   ├── extract.py           # Multi-format extraction (PDF, CSV, fixed-width, XML)
-│   └── chunk.py             # LangChain text splitter with source-aware chunking
-├── index/                   # Phase 3
-│   ├── __init__.py          # Re-exports: get_embeddings, get_or_create_chroma, upsert_documents
-│   ├── embed.py             # HuggingFace embedding model loader
-│   └── store.py             # ChromaDB operations (create, upsert, dedup)
-└── query/                   # Phase 4
-    ├── __init__.py
-    ├── retriever.py          # Chroma-backed LangChain retriever
-    └── chain.py              # RAG chain: prompt + local LLM + answer generation
+```mermaid
+flowchart TB
+  subgraph Root["src/medicare_rag/"]
+    Init["__init__.py\nPackage root"]
+    Config["config.py\nCentralized configuration (env vars + defaults)"]
+
+    subgraph Download["download/ — Phase 1"]
+      DInit["__init__.py\nRe-exports: download_iom, download_mcd, download_codes"]
+      IOM["iom.py — IOM PDF chapter scraper"]
+      MCD["mcd.py — MCD bulk ZIP downloader + safe extractor"]
+      Codes["codes.py — HCPCS + ICD-10-CM downloader"]
+      Manifest["_manifest.py — Manifest writing + SHA-256 hashing"]
+      Utils["_utils.py — URL sanitization, shared timeout constant"]
+    end
+
+    subgraph Ingest["ingest/ — Phase 2"]
+      IInit["__init__.py"]
+      Extract["extract.py — Multi-format extraction (PDF, CSV, fixed-width, XML)"]
+      Chunk["chunk.py — LangChain text splitter with source-aware chunking"]
+    end
+
+    subgraph Index["index/ — Phase 3"]
+      IdxInit["__init__.py — Re-exports: get_embeddings, get_or_create_chroma, upsert_documents"]
+      Embed["embed.py — HuggingFace embedding model loader"]
+      Store["store.py — ChromaDB operations (create, upsert, dedup)"]
+    end
+
+    subgraph Query["query/ — Phase 4"]
+      QInit["__init__.py"]
+      Retriever["retriever.py — Chroma-backed LangChain retriever"]
+      Chain["chain.py — RAG chain: prompt + local LLM + answer generation"]
+    end
+  end
 ```
 
 ### Configuration (`config.py`)
@@ -331,25 +335,39 @@ The system includes a comprehensive retrieval evaluation suite driven by `script
 
 ## Dependency Graph
 
-```
-beautifulsoup4    ─── download (HTML parsing for IOM/HCPCS index pages)
-httpx             ─── download (HTTP client with streaming)
-pdfplumber        ─── ingest/extract (PDF text extraction)
-unstructured      ─── ingest/extract (optional; OCR fallback for image PDFs)
+```mermaid
+flowchart LR
+  subgraph Download["download"]
+    BS4["beautifulsoup4\nHTML parsing IOM/HCPCS"]
+    Httpx["httpx\nHTTP client with streaming"]
+  end
 
-langchain-core         ─┐
-langchain-text-splitters │── ingest/chunk (Document model, text splitting)
-langchain-community     │
-langchain-huggingface   │── index/embed + query/chain (embeddings, LLM pipeline)
-langchain-chroma        │── index/store + query/retriever (vector store wrapper)
-chromadb               ─┘
+  subgraph Ingest["ingest"]
+    Pdf["pdfplumber\nextract: PDF text"]
+    Unstruct["unstructured\nextract: optional OCR fallback"]
+    LCChunk["langchain-core, langchain-text-splitters\nchunk: Document model, text splitting"]
+  end
 
-sentence-transformers ─── index/embed (embedding model)
-transformers + accelerate ─── query/chain (local LLM inference)
-python-dotenv         ─── config (env loading)
+  subgraph Index["index"]
+    LCE["langchain-huggingface\nembed: embeddings"]
+    LCStore["langchain-chroma, chromadb\nstore + retriever: vector store"]
+    ST["sentence-transformers\nembed: embedding model"]
+  end
 
-streamlit (optional)  ─── app.py (web UI)
-ruff (dev)            ─── linting/formatting
+  subgraph Query["query"]
+    LCChain["langchain-huggingface\nchain: LLM pipeline"]
+    LCRet["langchain-chroma\nretriever"]
+    Trans["transformers + accelerate\nchain: local LLM inference"]
+  end
+
+  subgraph Config["config"]
+    Dotenv["python-dotenv\nenv loading"]
+  end
+
+  subgraph Optional["optional"]
+    Streamlit["streamlit — app.py (web UI)"]
+    Ruff["ruff (dev) — linting/formatting"]
+  end
 ```
 
 ## Testing Strategy
