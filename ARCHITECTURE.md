@@ -1,0 +1,372 @@
+# Architecture
+
+This document describes the high-level architecture, data flow, component design, and key technical decisions of the Medicare RAG POC system.
+
+## System Overview
+
+Medicare RAG is a four-phase Retrieval-Augmented Generation pipeline for Medicare Revenue Cycle Management. It downloads authoritative CMS data, transforms it into searchable vector embeddings, and answers natural-language questions with cited sources. The entire system runs locally with no external API keys.
+
+```
+ ┌──────────────────────────────────────────────────────────────────┐
+ │                        User Interfaces                          │
+ │  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────┐  │
+ │  │  CLI REPL        │  │  Streamlit App   │  │  Eval Scripts │  │
+ │  │  (scripts/       │  │  (app.py)        │  │  (scripts/    │  │
+ │  │   query.py)      │  │                  │  │   validate_   │  │
+ │  │                  │  │                  │  │   and_eval.py)│  │
+ │  └───────┬─────────┘  └────────┬─────────┘  └──────┬────────┘  │
+ └──────────┼──────────────────────┼───────────────────┼───────────┘
+            │                      │                   │
+            ▼                      ▼                   ▼
+ ┌──────────────────────────────────────────────────────────────────┐
+ │                    Phase 4: Query & RAG                          │
+ │  ┌─────────────────────┐    ┌───────────────────────────────┐   │
+ │  │  retriever.py        │    │  chain.py                     │   │
+ │  │  (Chroma similarity  │───▶│  (prompt + local LLM +        │   │
+ │  │   search, metadata   │    │   cited answer generation)    │   │
+ │  │   filters, top-k)    │    │                               │   │
+ │  └──────────┬───────────┘    └───────────────────────────────┘   │
+ └─────────────┼────────────────────────────────────────────────────┘
+               │
+               ▼
+ ┌──────────────────────────────────────────────────────────────────┐
+ │                  Phase 3: Index (Vector Store)                   │
+ │  ┌─────────────────────┐    ┌───────────────────────────────┐   │
+ │  │  embed.py            │    │  store.py                     │   │
+ │  │  (sentence-           │    │  (ChromaDB upsert, content   │   │
+ │  │   transformers)      │    │   hash dedup, batch ops)     │   │
+ │  └──────────────────────┘    └───────────────────────────────┘   │
+ └──────────────────────────────────────────────────────────────────┘
+               ▲
+               │
+ ┌──────────────────────────────────────────────────────────────────┐
+ │                Phase 2: Ingest (Extract & Chunk)                 │
+ │  ┌─────────────────────┐    ┌───────────────────────────────┐   │
+ │  │  extract.py          │    │  chunk.py                     │   │
+ │  │  (PDF, CSV, XML,     │    │  (RecursiveCharacterText-     │   │
+ │  │   HTML → plain text  │    │   Splitter, metadata-aware)   │   │
+ │  │   + metadata)        │    │                               │   │
+ │  └──────────────────────┘    └───────────────────────────────┘   │
+ └──────────────────────────────────────────────────────────────────┘
+               ▲
+               │
+ ┌──────────────────────────────────────────────────────────────────┐
+ │                   Phase 1: Download                              │
+ │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────────┐  │
+ │  │  iom.py   │  │  mcd.py   │  │  codes.py │  │  _manifest.py │  │
+ │  │  (PDF     │  │  (ZIP     │  │  (HCPCS,  │  │  (SHA-256,    │  │
+ │  │   scraper)│  │   stream) │  │   ICD-10) │  │   idempotency)│  │
+ │  └──────────┘  └──────────┘  └──────────┘  └────────────────┘  │
+ └──────────────────────────────────────────────────────────────────┘
+               ▲
+               │
+        CMS.gov, CDC.gov
+        (Internet-Only Manuals, MCD bulk data, HCPCS/ICD code files)
+```
+
+## Data Flow
+
+The pipeline processes data through four sequential phases. Each phase is idempotent and can be re-run independently.
+
+### Phase 1: Download → `data/raw/`
+
+External CMS and CDC sources are downloaded into `data/raw/` with manifest-based idempotency.
+
+```
+CMS.gov ──┐
+           │  httpx (streaming)
+CDC.gov ──┤  ──────────────────▶  data/raw/
+           │                         ├── iom/
+           │                         │   ├── 100-02/  (chapter PDFs)
+           │                         │   ├── 100-03/  (chapter PDFs)
+           │                         │   ├── 100-04/  (chapter PDFs)
+           │                         │   └── manifest.json
+           │                         ├── mcd/
+           │                         │   ├── current_lcd.zip
+           │                         │   ├── ncd.zip
+           │                         │   ├── ...
+           │                         │   └── manifest.json
+           │                         └── codes/
+           │                             ├── hcpcs/ (ZIP)
+           │                             ├── icd10-cm/ (optional ZIP)
+           │                             └── manifest.json
+```
+
+**Three data sources:**
+
+| Source | Module | Content | Format |
+|--------|--------|---------|--------|
+| **IOM** (Internet-Only Manuals) | `download/iom.py` | Medicare Benefit Policy (100-02), NCD (100-03), Claims Processing (100-04) | Chapter PDFs scraped from CMS index pages |
+| **MCD** (Medicare Coverage Database) | `download/mcd.py` | LCDs, NCDs, Articles | Single bulk ZIP containing inner ZIPs with CSV data |
+| **Codes** | `download/codes.py` | HCPCS Level II codes, optional ICD-10-CM | HCPCS ZIP from CMS quarterly page; ICD-10-CM from CDC (env-configured URL) |
+
+**Key design decisions:**
+- All HTTP uses `httpx` with streaming for large files and a shared 60-second timeout
+- Filenames are sanitized via `_utils.sanitize_filename_from_url()` to prevent path traversal
+- ZIP extraction uses `_safe_extract_zip()` which validates that resolved paths stay within the output directory (zip-slip protection)
+- Each source writes a `manifest.json` containing source URL, download date, and file list with SHA-256 hashes
+- Re-runs skip downloads when manifests and files exist (use `--force` to override)
+
+### Phase 2: Ingest → `data/processed/`
+
+Raw files are extracted into plain text with structured metadata, then chunked into LangChain `Document` objects.
+
+```
+data/raw/              extract.py            data/processed/
+  ├── iom/   ──────────────────────────▶       ├── iom/
+  │   └── *.pdf        (pdfplumber +           │   └── {manual}/{chapter}.txt
+  │                     unstructured              │       + .meta.json
+  │                     fallback)              │
+  ├── mcd/   ──────────────────────────▶       ├── mcd/
+  │   └── *.zip→*.csv  (CSV parse,            │   └── {lcd|ncd|article}/{id}.txt
+  │                     HTML strip)            │       + .meta.json
+  └── codes/ ──────────────────────────▶       └── codes/
+      ├── hcpcs/       (fixed-width            ├── hcpcs/{code}.txt
+      │                 320-char parse)        │   + .meta.json
+      └── icd10-cm/    (XML parse)             └── icd10cm/{code}.txt
+                                                   + .meta.json
+
+data/processed/        chunk.py              List[Document]
+  └── **/*.txt   ──────────────────────▶     (page_content + metadata)
+      + .meta.json     RecursiveCharacter-
+                       TextSplitter
+                       (1000 chars, 200 overlap)
+```
+
+**Extraction strategies by source type:**
+
+| Source | Extractor | Details |
+|--------|-----------|---------|
+| IOM PDFs | `pdfplumber` | Per-page text extraction; falls back to `unstructured` (optional dep) if < 50 chars/page |
+| MCD CSVs | `csv.DictReader` | Parses inner ZIPs → CSVs; HTML-strips cell content via BeautifulSoup; one document per row |
+| HCPCS | Fixed-width parser | 320-char record layout; merges continuation lines (RIC 4/8); one document per code |
+| ICD-10-CM | `xml.etree.ElementTree` | Extracts `<code>` + `<desc>` pairs from tabular XML inside ZIP |
+
+**Metadata schema:** Every extracted document produces a `.meta.json` alongside its `.txt`, containing:
+- `source` — `"iom"`, `"mcd"`, or `"codes"`
+- `manual` — e.g. `"100-02"` (IOM only)
+- `chapter` — derived from filename patterns (IOM only)
+- `title`, `effective_date`, `source_url`, `jurisdiction` — from source data where available
+- `doc_id` — unique identifier combining source type and document key
+
+**Chunking policy:**
+- Policy documents (IOM, MCD): `RecursiveCharacterTextSplitter` with 1000-char chunks and 200-char overlap; separators: `\n\n`, `\n`, `. `, ` `, `""`
+- Code documents (HCPCS, ICD-10-CM): kept as single chunks (one document per code entry) since they are short, self-contained records
+- Chunk metadata inherits from parent document and adds `chunk_index` and `total_chunks`
+
+### Phase 3: Index → `data/chroma/`
+
+Chunked documents are embedded and stored in a local ChromaDB vector store with incremental upsert logic.
+
+```
+List[Document]      embed.py            store.py              ChromaDB
+  (chunks)    ──▶  HuggingFace    ──▶  content-hash     ──▶  data/chroma/
+                   Embeddings          dedup + batch          collection:
+                   (all-MiniLM-        upsert                 "medicare_rag"
+                    L6-v2,
+                    384-dim)
+```
+
+**Embedding model:** `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions) by default, configurable via `EMBEDDING_MODEL` env var. Uses `langchain_huggingface.HuggingFaceEmbeddings` wrapper for LangChain compatibility.
+
+**Incremental upsert algorithm:**
+1. Fetch all existing document IDs and their `content_hash` values from ChromaDB (batched in groups of 500 to avoid SQLite variable limits)
+2. For each incoming chunk, compute `content_hash` = SHA-256 of `page_content + doc_id + chunk_index`
+3. Skip chunks whose hash matches the stored hash (unchanged content)
+4. Embed only new/changed chunks, then upsert in batches of 5000 (ChromaDB's max batch size)
+5. Metadata is sanitized to ChromaDB-compatible types (str, int, float, bool only; None values dropped)
+
+**Chunk ID scheme:** `{doc_id}_{chunk_index}` for chunked documents, or plain `{doc_id}` for single-chunk code documents.
+
+### Phase 4: Query & RAG
+
+The retrieval and generation layer connects ChromaDB similarity search to a local LLM.
+
+```
+User Question
+      │
+      ▼
+┌─────────────┐     ┌──────────────────┐     ┌───────────────────────┐
+│  Retriever   │────▶│  Context Builder  │────▶│  LLM (TinyLlama)     │
+│  (Chroma     │     │  [1] chunk_1      │     │                       │
+│   top-k=8,   │     │  [2] chunk_2      │     │  System: "You are a   │
+│   metadata   │     │  ...              │     │   Medicare RCM         │
+│   filters)   │     │  [k] chunk_k      │     │   assistant..."       │
+└─────────────┘     └──────────────────┘     │                       │
+                                              │  Human: context +     │
+                                              │   question            │
+                                              └───────────┬───────────┘
+                                                          │
+                                                          ▼
+                                               Answer with [1][2]...
+                                               citations + source docs
+```
+
+**Retriever:** `langchain_chroma.Chroma.as_retriever()` with configurable `k` (default 8) and optional metadata filter (Chroma `where` clause). Supports filtering by `source`, `manual`, `jurisdiction`, and combinations via `$and`.
+
+**RAG chain:**
+1. Retrieve top-k chunks by cosine similarity
+2. Format context as numbered items: `[1] chunk_content`, `[2] chunk_content`, ...
+3. Build a `ChatPromptTemplate` with system + human messages
+4. Invoke local LLM via `HuggingFacePipeline` → `ChatHuggingFace`
+5. Return `{"answer": str, "source_documents": list[Document]}`
+
+**LLM configuration:**
+- Default model: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- Device placement via `device_map` (supports `auto`, `cpu`, or specific device)
+- Generation params: `max_new_tokens=512`, `do_sample=False`, `repetition_penalty=1.05`
+- All configurable via environment variables
+
+## Component Architecture
+
+### Package Structure
+
+```
+src/medicare_rag/
+├── __init__.py              # Package root
+├── config.py                # Centralized configuration (env vars + defaults)
+├── download/                # Phase 1
+│   ├── __init__.py          # Re-exports: download_iom, download_mcd, download_codes
+│   ├── iom.py               # IOM PDF chapter scraper
+│   ├── mcd.py               # MCD bulk ZIP downloader + safe extractor
+│   ├── codes.py             # HCPCS + ICD-10-CM downloader
+│   ├── _manifest.py         # Manifest writing + SHA-256 hashing
+│   └── _utils.py            # URL sanitization, shared timeout constant
+├── ingest/                  # Phase 2
+│   ├── __init__.py
+│   ├── extract.py           # Multi-format extraction (PDF, CSV, fixed-width, XML)
+│   └── chunk.py             # LangChain text splitter with source-aware chunking
+├── index/                   # Phase 3
+│   ├── __init__.py          # Re-exports: get_embeddings, get_or_create_chroma, upsert_documents
+│   ├── embed.py             # HuggingFace embedding model loader
+│   └── store.py             # ChromaDB operations (create, upsert, dedup)
+└── query/                   # Phase 4
+    ├── __init__.py
+    ├── retriever.py          # Chroma-backed LangChain retriever
+    └── chain.py              # RAG chain: prompt + local LLM + answer generation
+```
+
+### Configuration (`config.py`)
+
+All configuration is centralized in a single module that loads `.env` via `python-dotenv` and provides sensible defaults.
+
+| Config | Default | Env Override |
+|--------|---------|-------------|
+| `DATA_DIR` | `{repo_root}/data` | `DATA_DIR` |
+| `RAW_DIR` | `{DATA_DIR}/raw` | — |
+| `PROCESSED_DIR` | `{DATA_DIR}/processed` | — |
+| `CHROMA_DIR` | `{DATA_DIR}/chroma` | — |
+| `COLLECTION_NAME` | `"medicare_rag"` | — |
+| `EMBEDDING_MODEL` | `"sentence-transformers/all-MiniLM-L6-v2"` | `EMBEDDING_MODEL` |
+| `LOCAL_LLM_MODEL` | `"TinyLlama/TinyLlama-1.1B-Chat-v1.0"` | `LOCAL_LLM_MODEL` |
+| `LOCAL_LLM_DEVICE` | `"auto"` | `LOCAL_LLM_DEVICE` |
+| `LOCAL_LLM_MAX_NEW_TOKENS` | `512` | `LOCAL_LLM_MAX_NEW_TOKENS` |
+| `LOCAL_LLM_REPETITION_PENALTY` | `1.05` | `LOCAL_LLM_REPETITION_PENALTY` |
+
+### Scripts (CLI Entry Points)
+
+| Script | Purpose | Key Arguments |
+|--------|---------|---------------|
+| `scripts/download_all.py` | Run Phase 1 downloads | `--source`, `--force` |
+| `scripts/ingest_all.py` | Run Phases 2-3 (extract, chunk, embed, store) | `--source`, `--force`, `--skip-extract`, `--skip-index` |
+| `scripts/query.py` | Interactive RAG REPL | `--filter-source`, `--filter-manual`, `--filter-jurisdiction`, `-k` |
+| `scripts/validate_and_eval.py` | Index validation + retrieval evaluation | `--validate-only`, `--eval-only`, `-k`, `--k-values`, `--json`, `--report` |
+| `scripts/run_rag_eval.py` | Full RAG eval (LLM answers) report | `--eval-file`, `--out`, `-k` |
+
+### Streamlit App (`app.py`)
+
+An optional web UI for interactive embedding search. Provides:
+- Semantic similarity search with distance scores
+- Sidebar filters (source, manual, jurisdiction)
+- Quick-check bubble questions for common Medicare topics
+- Styled result cards with metadata pills
+- Embedding dimension mismatch detection and user-friendly error messages
+- Collection metadata cached with 5-minute TTL
+
+Uses the Chroma wrapper's `_collection` private API for batched metadata retrieval and dimension checks.
+
+## Key Technical Decisions
+
+### Why local-only (no API keys)?
+
+The system uses `sentence-transformers` for embeddings and a local HuggingFace model for generation. This eliminates API costs, removes network dependency during inference, and ensures data privacy for sensitive Medicare content.
+
+### Why ChromaDB?
+
+ChromaDB was chosen as the vector store for its simplicity, local persistence, and LangChain integration. It persists to disk at `data/chroma/` and requires no external server process.
+
+### Incremental indexing by content hash
+
+Instead of rebuilding the entire index on each ingest, the system computes a SHA-256 hash of each chunk's content + metadata identifiers. Only chunks with new or changed hashes are re-embedded and upserted, significantly reducing re-indexing time for large corpora.
+
+### Source-aware chunking
+
+Code documents (HCPCS, ICD-10-CM) are short, self-contained records that should not be split across chunks. The chunking layer treats them as single documents while applying recursive character splitting (with overlap) to longer policy documents from IOM and MCD.
+
+### Metadata-enriched retrieval
+
+Every chunk carries structured metadata (`source`, `manual`, `chapter`, `jurisdiction`, etc.) through the entire pipeline. This enables filtered retrieval (e.g., "only IOM 100-02" or "only JL jurisdiction") and supports the evaluation framework's per-source and per-category breakdowns.
+
+### Zip-slip protection
+
+All ZIP extraction (MCD bulk data, nested CSVs, ICD-10-CM) validates that extracted file paths resolve within the target directory using `Path.resolve()` and `is_relative_to()`, preventing directory traversal attacks.
+
+## Evaluation Framework
+
+The system includes a comprehensive retrieval evaluation suite driven by `scripts/eval_questions.json` (60 Medicare-focused questions with expected keywords, sources, categories, and difficulty levels).
+
+**Metrics computed:**
+- **Hit Rate** — fraction of questions where at least one fully relevant document appears in top-k
+- **MRR** (Mean Reciprocal Rank) — average of 1/rank of the first relevant document
+- **Precision@k** — fraction of top-k results that are fully relevant
+- **NDCG@k** — Normalized Discounted Cumulative Gain
+- **Consistency** — Jaccard similarity of result sets for rephrased versions of the same question
+- **Latency** — p50, p95, p99 retrieval times
+
+**Breakdowns by:**
+- Category (policy_coverage, claims_billing, coding_modifiers, code_lookup, lcd_policy, etc.)
+- Difficulty (easy, medium, hard)
+- Expected source (iom, mcd, codes)
+- Multi-k sweep (e.g., k=1,3,5,10)
+
+## Dependency Graph
+
+```
+beautifulsoup4    ─── download (HTML parsing for IOM/HCPCS index pages)
+httpx             ─── download (HTTP client with streaming)
+pdfplumber        ─── ingest/extract (PDF text extraction)
+unstructured      ─── ingest/extract (optional; OCR fallback for image PDFs)
+
+langchain-core         ─┐
+langchain-text-splitters │── ingest/chunk (Document model, text splitting)
+langchain-community     │
+langchain-huggingface   │── index/embed + query/chain (embeddings, LLM pipeline)
+langchain-chroma        │── index/store + query/retriever (vector store wrapper)
+chromadb               ─┘
+
+sentence-transformers ─── index/embed (embedding model)
+transformers + accelerate ─── query/chain (local LLM inference)
+python-dotenv         ─── config (env loading)
+
+streamlit (optional)  ─── app.py (web UI)
+ruff (dev)            ─── linting/formatting
+```
+
+## Testing Strategy
+
+Tests live in `tests/` and run via `pytest`. All external dependencies (HTTP, file I/O, models) are mocked using `unittest.mock`.
+
+| Test Module | Coverage Area | Strategy |
+|-------------|---------------|----------|
+| `test_download.py` | Phase 1: downloaders | Mocked HTTP responses, manifest verification, zip-slip protection, idempotency checks |
+| `test_ingest.py` | Phase 2: extraction + chunking | Fixtures with sample PDFs/CSVs in `tmp_path`, metadata schema validation |
+| `test_index.py` | Phase 3: embeddings + store | Mocked embeddings, ChromaDB in-memory; skipped when ChromaDB unavailable |
+| `test_query.py` | Phase 4: retriever + chain | Mocked retriever and LLM, prompt template validation |
+| `test_search_validation.py` | Validation + eval | Eval question schema checks, metric computation |
+| `test_app.py` | Streamlit UI helpers | Metadata filter building, result rendering (requires `.[ui]`) |
+
+**Test patterns:**
+- Fixtures create isolated `tmp_path` directories
+- `unittest.mock.patch` replaces network calls and heavy model loads
+- Assertions verify file creation, manifest contents, and metadata correctness
+- No network access or real data downloads needed
