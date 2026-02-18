@@ -5,10 +5,7 @@ so that embedding models produce vectors closer to natural-language queries
 (e.g. "durable medical equipment" matches HCPCS E-codes).
 """
 
-import logging
 import re
-
-logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # HCPCS Level II code-prefix -> (category_label, [synonyms / related terms])
@@ -229,6 +226,7 @@ _ICD10_CHAPTERS: list[tuple[str, str, str, list[str]]] = [
       "urinary tract infection", "UTI", "chronic kidney disease",
       "nephrotic syndrome", "bladder disorder", "prostate disorder",
       "endometriosis", "infertility", "dialysis"]),
+    # O9A has a letter suffix; _icd10_end_key treats it so O00-O99 and O9A are included.
     ("O00", "O9A", "Pregnancy, Childbirth and the Puerperium",
      ["pregnancy", "childbirth", "obstetric", "prenatal", "postpartum",
       "ectopic pregnancy", "miscarriage", "preeclampsia",
@@ -324,6 +322,19 @@ def _icd10_category_key(code: str) -> tuple[str, int]:
     return (letter, num)
 
 
+def _icd10_end_key(end: str) -> tuple[str, int]:
+    """Return the end key for a chapter range. If end has a trailing letter (e.g. O9A),
+    use (letter, 99) so the full numeric block O00-O99 and the literal O9A are included.
+    """
+    end = end.upper().replace(".", "")
+    if not end or len(end) < 2:
+        return ("", 0)
+    letter = end[0]
+    if end[-1].isalpha() and len(end) >= 2:
+        return (letter, 99)
+    return _icd10_category_key(end)
+
+
 def get_icd10_enrichment(code: str) -> str:
     """Return a semantic enrichment string for the given ICD-10-CM code.
 
@@ -336,7 +347,7 @@ def get_icd10_enrichment(code: str) -> str:
 
     for start, end, label, terms in _ICD10_CHAPTERS:
         start_key = _icd10_category_key(start)
-        end_key = _icd10_category_key(end)
+        end_key = _icd10_end_key(end)
         if start_key <= code_key <= end_key:
             terms_str = ", ".join(terms)
             return (

@@ -78,7 +78,7 @@ python scripts/validate_and_eval.py --eval-only --json  # metrics as JSON
 ```
 
 - **Validation:** Checks Chroma collection, document count, sample metadata (`doc_id`, `content_hash`), and that similarity search runs.
-- **Evaluation:** Uses `scripts/eval_questions.json` (Medicare queries with expected keywords/sources). Reports **hit rate** (relevant doc in top-k) and **MRR** (mean reciprocal rank). Edit `eval_questions.json` to extend the set.
+- **Evaluation:** Uses `scripts/eval_questions.json` (Medicare queries with expected keywords/sources). Reports **hit rate** (relevant doc in top-k) and **MRR** (mean reciprocal rank). Edit `eval_questions.json` to extend the set. Output from `validate_and_eval.py --json` may be saved as `scripts/eval_metrics.json` and committed as a snapshot of the last run.
 
 **Full-RAG eval (answer quality):** Run the RAG chain on the eval set and write a report for manual review:
 

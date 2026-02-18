@@ -180,6 +180,18 @@ class TestGetIcd10Enrichment:
         assert "ICD-10-CM" in result
         assert "A00-B99" in result
 
+    def test_o99_pregnancy_chapter(self) -> None:
+        """O99 is in the pregnancy chapter (O00-O9A); enrichment uses end key so O10-O99 are included."""
+        result = get_icd10_enrichment("O99.0")
+        assert result != ""
+        assert "Pregnancy" in result or "Puerperium" in result
+
+    def test_o10_pregnancy_chapter(self) -> None:
+        """O10 is in the pregnancy chapter (O00-O9A)."""
+        result = get_icd10_enrichment("O10.0")
+        assert result != ""
+        assert "Pregnancy" in result or "Puerperium" in result
+
 
 # ---------------------------------------------------------------------------
 # enrich_*_text wrappers
