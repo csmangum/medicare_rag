@@ -18,9 +18,10 @@ src/medicare_rag/           # Main package (installed as editable via `pip insta
     codes.py                #   HCPCS + ICD-10-CM code file downloader
     _manifest.py            #   Manifest writing and SHA-256 hashing
     _utils.py               #   URL sanitization, stream_download helper, DOWNLOAD_TIMEOUT (from config)
-  ingest/                   # Phase 2: text extraction and chunking
+  ingest/                   # Phase 2: text extraction, enrichment, and chunking
     __init__.py             #   SourceKind type (imported by extract, chunk)
     extract.py              #   PDF/text extraction (pdfplumber, optional unstructured fallback); defusedxml for XML when available
+    enrich.py               #   HCPCS/ICD-10 semantic enrichment (category labels, synonyms, related terms)
     chunk.py                #   LangChain text splitters (uses CHUNK_SIZE, CHUNK_OVERLAP from config)
   index/                    # Phase 3: embedding and vector store
     embed.py                #   sentence-transformers embeddings
@@ -38,7 +39,8 @@ scripts/                    # CLI entry points
 tests/                      # Unit tests (pytest; install with pip install -e ".[dev]")
   test_config.py            #   Safe env int/float parsing
   test_download.py          #   Mocked HTTP, idempotency, zip-slip and URL sanitization
-  test_ingest.py            #   Extraction and chunking tests
+  test_ingest.py            #   Extraction and chunking tests (including enrichment integration)
+  test_enrich.py            #   HCPCS/ICD-10-CM semantic enrichment tests
   test_index.py             #   Chroma/embedding and get_raw_collection tests (skipped when Chroma unavailable)
   test_query.py             #   Retriever and chain tests
   test_search_validation.py #   Search/validation tests
