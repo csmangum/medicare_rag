@@ -16,6 +16,7 @@ import pdfplumber
 from bs4 import BeautifulSoup
 
 from medicare_rag.ingest import SourceKind
+from medicare_rag.ingest.enrich import enrich_hcpcs_text, enrich_icd10_text
 
 try:
     import defusedxml.ElementTree as SafeET
@@ -364,7 +365,12 @@ def _write_hcpcs_record(
     if not force and out_txt.exists() and out_meta.exists():
         written.append((out_txt, out_meta))
     else:
-        content = f"Code: {current['code']}\n\nLong description: {current['long_desc']}\n\nShort description: {current['short_desc']}"
+        raw_content = (
+            f"Code: {current['code']}\n\n"
+            f"Long description: {current['long_desc']}\n\n"
+            f"Short description: {current['short_desc']}"
+        )
+        content = enrich_hcpcs_text(current["code"], raw_content)
         meta = _meta_schema(
             source="codes",
             manual=None,
@@ -476,7 +482,8 @@ def extract_icd10cm(processed_dir: Path, raw_dir: Path, *, force: bool = False) 
                     if not force and out_txt.exists() and out_meta.exists():
                         written.append((out_txt, out_meta))
                         continue
-                    content = f"Code: {code_val}\n\nDescription: {desc_val}"
+                    raw_content = f"Code: {code_val}\n\nDescription: {desc_val}"
+                    content = enrich_icd10_text(code_val, raw_content)
                     meta = _meta_schema(
                         source="codes",
                         manual=None,

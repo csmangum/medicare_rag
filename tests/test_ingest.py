@@ -188,6 +188,9 @@ def test_extract_hcpcs_writes_txt_and_meta(tmp_hcpcs_raw: Path, tmp_path: Path) 
     assert "A1001" in text
     assert "Dressing" in text
     assert "continued description" in text
+    # Semantic enrichment should be prepended
+    assert "HCPCS A-codes" in text
+    assert ("Medical" in text and "Supply" in text) or ("Surgical" in text)
     meta = json.loads(meta_path.read_text())
     assert meta["source"] == "codes"
     assert meta.get("hcpcs_code") == "A1001"
@@ -251,6 +254,9 @@ def test_extract_icd10cm_writes_txt_and_meta(tmp_icd10cm_raw: Path, tmp_path: Pa
     assert "A00.0" in by_code
     assert "A00.1" in by_code
     assert "Cholera" in by_code["A00.0"][0]
+    # Semantic enrichment should be prepended
+    assert "ICD-10-CM" in by_code["A00.0"][0]
+    assert "Infectious" in by_code["A00.0"][0]
 
 
 # --- Chunking ---

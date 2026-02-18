@@ -144,6 +144,15 @@ flowchart LR
 | HCPCS | Fixed-width parser | 320-char record layout; merges continuation lines (RIC 4/8); one document per code |
 | ICD-10-CM | `defusedxml` (when available) or `xml.etree` | Extracts `<code>` + `<desc>` pairs from tabular XML inside ZIP; defusedxml used when available for safe parsing |
 
+**Semantic enrichment (`enrich.py`):**
+
+Before writing HCPCS and ICD-10-CM documents to disk, the extraction step enriches their text with category labels, synonyms, and related terms via `enrich_hcpcs_text()` and `enrich_icd10_text()`. This prepends a structured enrichment string to each code document:
+
+- **HCPCS:** Maps the code's letter prefix (with sub-range granularity) to a category label and related terms. For example, E-codes get: *"HCPCS E-codes: Durable Medical Equipment. Related terms: durable medical equipment, DME, wheelchair, hospital bed, oxygen equipment, CPAP, BiPAP, walker..."*
+- **ICD-10-CM:** Maps the code's chapter range to a category label and related terms. For example, I-codes get: *"ICD-10-CM (I00-I99): Diseases of the Circulatory System. Related terms: cardiovascular disease, heart disease, hypertension, heart failure, atrial fibrillation..."*
+
+This enrichment bridges the semantic gap between terse code descriptions and natural-language queries, enabling the embedding model to match queries like "What HCPCS codes are used for durable medical equipment?" to code records that would otherwise only contain clinical abbreviations.
+
 **Metadata schema:** Every extracted document produces a `.meta.json` alongside its `.txt`, containing:
 - `source` — `"iom"`, `"mcd"`, or `"codes"`
 - `manual` — e.g. `"100-02"` (IOM only)
@@ -233,6 +242,7 @@ flowchart TB
     subgraph Ingest["ingest/ — Phase 2"]
       IInit["__init__.py — SourceKind type"]
       Extract["extract.py — Multi-format extraction (PDF, CSV, fixed-width, XML; defusedxml when available)"]
+      Enrich["enrich.py — HCPCS/ICD-10 semantic enrichment (category labels, synonyms, related terms)"]
       Chunk["chunk.py — LangChain text splitter with source-aware chunking"]
     end
 
@@ -382,7 +392,8 @@ Tests live in `tests/` and run via `pytest`. All external dependencies (HTTP, fi
 | Test Module | Coverage Area | Strategy |
 |-------------|---------------|----------|
 | `test_download.py` | Phase 1: downloaders | Mocked HTTP responses, manifest verification, zip-slip protection, idempotency checks |
-| `test_ingest.py` | Phase 2: extraction + chunking | Fixtures with sample PDFs/CSVs in `tmp_path`, metadata schema validation |
+| `test_ingest.py` | Phase 2: extraction + chunking | Fixtures with sample PDFs/CSVs in `tmp_path`, metadata schema validation, enrichment integration |
+| `test_enrich.py` | Phase 2: semantic enrichment | HCPCS prefix mapping (15 tests), ICD-10-CM chapter ranges (17 tests), edge cases, wrapper functions |
 | `test_index.py` | Phase 3: embeddings + store | Mocked embeddings, ChromaDB in-memory; skipped when ChromaDB unavailable |
 | `test_query.py` | Phase 4: retriever + chain | Mocked retriever and LLM, prompt template validation |
 | `test_search_validation.py` | Validation + eval | Eval question schema checks, metric computation |
