@@ -7,6 +7,7 @@ import csv
 import json
 import logging
 import re
+import sys
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -27,6 +28,65 @@ logger = logging.getLogger(__name__)
 
 # Minimum chars per page to consider pdfplumber extraction "good"
 _PDF_MIN_CHARS_PER_PAGE = 50
+
+_CSV_FIELD_LIMIT_INITIALIZED = False
+
+
+def _ensure_csv_field_size_limit() -> int:
+    """Increase Python's global CSV max field size to handle very large text fields.
+
+    Python's built-in csv module has a process-wide per-field size limit. Calling this
+    function raises that limit for all subsequent CSV parsing done in this process
+    (for example, when reading MCD LCD, NCD, and Article CSV exports that may contain
+    very large HTML policy or narrative text).
+    """
+    global _CSV_FIELD_LIMIT_INITIALIZED
+    if _CSV_FIELD_LIMIT_INITIALIZED:
+        return csv.field_size_limit()
+
+    desired = sys.maxsize
+    while True:
+        try:
+            csv.field_size_limit(desired)
+            _CSV_FIELD_LIMIT_INITIALIZED = True
+            return csv.field_size_limit()
+        except OverflowError:
+            desired = int(desired / 2)
+            if desired <= 0:
+                current_limit = csv.field_size_limit()
+                logger.warning(
+                    "Could not increase CSV field size limit to desired value on this "
+                    "platform; continuing with current limit %d.",
+                    current_limit,
+                )
+                _CSV_FIELD_LIMIT_INITIALIZED = True
+                return current_limit
+
+
+_MCD_LONG_TEXT_KEY_TOKENS = (
+    "body",
+    "text",
+    "policy",
+    "content",
+    "description",
+    "summary",
+    "indication",
+    "coverage",
+    "criteria",
+    "limitation",
+    "documentation",
+    "rationale",
+    "explanation",
+    "note",
+    "comment",
+)
+
+
+def _is_mcd_long_text_key(k: str) -> bool:
+    kl = (k or "").strip().lower()
+    # Use word boundaries to avoid false positives (e.g., "policy_date" matching "policy")
+    pattern = r"\b(?:" + "|".join(re.escape(t) for t in _MCD_LONG_TEXT_KEY_TOKENS) + r")\b"
+    return bool(re.search(pattern, kl))
 
 
 def _meta_schema(
@@ -195,9 +255,21 @@ def _cell_to_text(k: str, v: str) -> str | None:
         return None
     s = str(v)
     if "<" in s and ">" in s:
-        return _html_to_text(s)
+        txt = _html_to_text(s)
+        if not txt:
+            return None
+        if _is_mcd_long_text_key(k):
+            return f"{k}:\n{txt}"
+        return txt
     if len(s) < 500:
         return f"{k}: {v}"
+    if _is_mcd_long_text_key(k):
+        logger.debug(
+            "Including large non-HTML field for key '%s' with length %d characters",
+            k,
+            len(s),
+        )
+        return f"{k}:\n{s}"
     return None
 
 
@@ -240,6 +312,7 @@ def extract_mcd(processed_dir: Path, raw_dir: Path, *, force: bool = False) -> l
         logger.warning("MCD raw dir not found: %s", mcd_dir)
         return []
     written: list[tuple[Path, Path]] = []
+    _ensure_csv_field_size_limit()
     # Map inner zip name -> output subtype and id column
     zip_config = [
         ("current_lcd.zip", "lcd", "LCD_ID", "lcd_id"),
