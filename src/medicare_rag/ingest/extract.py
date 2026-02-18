@@ -84,9 +84,10 @@ _MCD_LONG_TEXT_KEY_TOKENS = (
 
 def _is_mcd_long_text_key(k: str) -> bool:
     kl = (k or "").strip().lower()
-    # Use word boundaries to avoid false positives (e.g., "policy_date" matching "policy")
-    pattern = r"\b(?:" + "|".join(re.escape(t) for t in _MCD_LONG_TEXT_KEY_TOKENS) + r")\b"
-    return bool(re.search(pattern, kl))
+    for token in _MCD_LONG_TEXT_KEY_TOKENS:
+        if token in kl:
+            return True
+    return False
 
 
 def _meta_schema(
