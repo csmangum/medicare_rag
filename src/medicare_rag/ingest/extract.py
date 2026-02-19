@@ -16,6 +16,7 @@ from xml.etree.ElementTree import Element
 import pdfplumber
 from bs4 import BeautifulSoup
 
+from medicare_rag.config import CSV_FIELD_SIZE_LIMIT
 from medicare_rag.ingest import SourceKind
 from medicare_rag.ingest.enrich import enrich_hcpcs_text, enrich_icd10_text
 
@@ -38,29 +39,29 @@ def _ensure_csv_field_size_limit() -> int:
     Python's built-in csv module has a process-wide per-field size limit. Calling this
     function raises that limit for all subsequent CSV parsing done in this process
     (for example, when reading MCD LCD, NCD, and Article CSV exports that may contain
-    very large HTML policy or narrative text).
+    very large HTML policy or narrative text). Uses a bounded limit from config to
+    reduce blast radius from malformed inputs.
     """
     global _CSV_FIELD_LIMIT_INITIALIZED
     if _CSV_FIELD_LIMIT_INITIALIZED:
         return csv.field_size_limit()
 
-    desired = sys.maxsize
-    while True:
+    desired = min(CSV_FIELD_SIZE_LIMIT, sys.maxsize)
+    while desired > 0:
         try:
             csv.field_size_limit(desired)
             _CSV_FIELD_LIMIT_INITIALIZED = True
             return csv.field_size_limit()
         except OverflowError:
             desired = int(desired / 2)
-            if desired <= 0:
-                current_limit = csv.field_size_limit()
-                logger.warning(
-                    "Could not increase CSV field size limit to desired value on this "
-                    "platform; continuing with current limit %d.",
-                    current_limit,
-                )
-                _CSV_FIELD_LIMIT_INITIALIZED = True
-                return current_limit
+    current_limit = csv.field_size_limit()
+    logger.warning(
+        "Could not increase CSV field size limit to desired value on this "
+        "platform; continuing with current limit %d.",
+        current_limit,
+    )
+    _CSV_FIELD_LIMIT_INITIALIZED = True
+    return current_limit
 
 
 _MCD_LONG_TEXT_KEY_TOKENS = (
@@ -80,14 +81,23 @@ _MCD_LONG_TEXT_KEY_TOKENS = (
     "note",
     "comment",
 )
+_MCD_LONG_TEXT_KEY_TOKEN_SET = frozenset(_MCD_LONG_TEXT_KEY_TOKENS)
 
 
 def _is_mcd_long_text_key(k: str) -> bool:
+    """Heuristically determine if a CSV header key is likely to contain long free text.
+
+    Tokenize on non-alphanumeric characters so that underscore-separated names
+    like "policy_text" or "coverage_criteria" are matched, while explicitly
+    excluding obvious date-like fields such as "policy_date".
+    """
     kl = (k or "").strip().lower()
-    for token in _MCD_LONG_TEXT_KEY_TOKENS:
-        if token in kl:
-            return True
-    return False
+    if not kl:
+        return False
+    if kl.endswith("_date") or kl.endswith(" date"):
+        return False
+    tokens = re.split(r"[^a-z0-9]+", kl)
+    return any(t in _MCD_LONG_TEXT_KEY_TOKEN_SET for t in tokens if t)
 
 
 def _meta_schema(

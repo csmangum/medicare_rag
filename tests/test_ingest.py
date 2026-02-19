@@ -14,6 +14,7 @@ from medicare_rag.ingest.extract import (
     _extract_mcd_zip,
     _format_date_yyyymmdd,
     _html_to_text,
+    _is_mcd_long_text_key,
     _meta_schema,
     _parse_hcpcs_line,
     extract_all,
@@ -34,6 +35,16 @@ def test_meta_schema() -> None:
     assert meta["title"] is None
     meta2 = _meta_schema(source="codes", hcpcs_code="A1001")
     assert meta2["hcpcs_code"] == "A1001"
+
+
+def test_is_mcd_long_text_key() -> None:
+    assert _is_mcd_long_text_key("Body") is True
+    assert _is_mcd_long_text_key("policy_text") is True
+    assert _is_mcd_long_text_key("coverage_criteria") is True
+    assert _is_mcd_long_text_key("policy_date") is False
+    assert _is_mcd_long_text_key("Effective_Date") is False
+    assert _is_mcd_long_text_key("LCD_ID") is False
+    assert _is_mcd_long_text_key("") is False
 
 
 def test_html_to_text() -> None:
@@ -147,28 +158,31 @@ def test_extract_mcd_writes_txt_and_meta(tmp_mcd_raw: Path, tmp_path: Path) -> N
 
 
 def test_extract_mcd_handles_large_csv_fields(tmp_path: Path) -> None:
-    """MCD lcd.csv contains very large policy text fields; extractor should not skip them."""
+    """MCD LCD.csv contains very large policy text fields; extractor should not skip them."""
     raw = tmp_path / "raw"
     processed = tmp_path / "processed"
     mcd = raw / "mcd" / "current_lcd"
     mcd.mkdir(parents=True)
 
     huge = "<p>" + ("Policy text " * 20000) + "</p>"  # ~240KB (>200KB)
-    csv_path = mcd / "lcd.csv"
+    csv_path = mcd / "LCD.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["LCD_ID", "Title", "Body"])
         w.writeheader()
         w.writerow({"LCD_ID": "L99999", "Title": "Huge LCD", "Body": huge})
 
-    written = extract_mcd(processed, raw, force=True)
-    assert any(p.name == "L99999.txt" for p, _ in written)
-    out_txt = processed / "mcd" / "lcd" / "L99999.txt"
-    assert out_txt.exists()
-    out = out_txt.read_text()
-    assert "Body:" in out
-    assert "Policy text" in out
-    # Verify that CSV field size limit was actually increased
-    assert csv.field_size_limit() > 200_000
+    previous_limit = csv.field_size_limit()
+    try:
+        written = extract_mcd(processed, raw, force=True)
+        assert any(p.name == "L99999.txt" for p, _ in written)
+        out_txt = processed / "mcd" / "lcd" / "L99999.txt"
+        assert out_txt.exists()
+        out = out_txt.read_text()
+        assert "Body:" in out
+        assert "Policy text" in out
+        assert csv.field_size_limit() > 200_000
+    finally:
+        csv.field_size_limit(previous_limit)
 
 
 # --- HCPCS extraction (fixed-width lines) ---
