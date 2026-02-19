@@ -292,6 +292,9 @@ def _cell_to_text(k: str, v: str) -> str | None:
             return None
         if _is_mcd_long_text_key(k):
             return f"{k}:\n{txt}"
+        # After HTML extraction, apply same size/key rule as plain text: drop large content for non-long-text keys
+        if len(txt) >= 500:
+            return None
         return txt
     if len(s) < 500:
         return f"{k}: {v}"

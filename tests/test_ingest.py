@@ -94,6 +94,18 @@ def test_cell_to_text_large_non_html_long_text_included() -> None:
     assert _cell_to_text("LCD_ID", "x" * 600) is None
 
 
+def test_cell_to_text_large_html_in_non_long_text_key_dropped() -> None:
+    """HTML in a non-long-text key that extracts to large text is dropped, same as plain text."""
+    # HTML that extracts to >500 chars in a non-long-text column (e.g. LCD_ID) should be dropped
+    big_html = "<p>" + ("word " * 150) + "</p>"  # ~750 chars of text after strip
+    assert _cell_to_text("LCD_ID", big_html) is None
+    # Short HTML in same key is still included
+    assert _cell_to_text("LCD_ID", "<p>short</p>") == "short"
+    # Long-text key with same HTML is included
+    assert _cell_to_text("Body", big_html) is not None
+    assert "Body:" in _cell_to_text("Body", big_html)
+
+
 def test_ensure_csv_field_size_limit_overflow_error_halving() -> None:
     """When csv.field_size_limit raises OverflowError, halving loop retries until success."""
     previous_limit = csv.field_size_limit()
