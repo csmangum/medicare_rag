@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from medicare_rag.ingest.chunk import _is_code_doc, chunk_documents
 from medicare_rag.ingest import extract
+from medicare_rag.ingest.chunk import _is_code_doc, _is_mcd_doc, chunk_documents
 from medicare_rag.ingest.extract import (
     _cell_to_text,
     _ensure_csv_field_size_limit,
@@ -386,6 +386,13 @@ def test_is_code_doc() -> None:
     assert _is_code_doc({"source": "iom"}) is False
 
 
+def test_is_mcd_doc() -> None:
+    assert _is_mcd_doc({"source": "mcd"}) is True
+    assert _is_mcd_doc({"source": "iom"}) is False
+    assert _is_mcd_doc({"source": "codes"}) is False
+    assert _is_mcd_doc({}) is False
+
+
 def test_chunk_documents_attaches_metadata(tmp_path: Path) -> None:
     (tmp_path / "iom" / "100-02").mkdir(parents=True)
     (tmp_path / "iom" / "100-02" / "ch6.txt").write_text(
@@ -484,6 +491,47 @@ def test_extract_icd10cm_duplicate_code_last_write_wins(tmp_path: Path) -> None:
 
 
 # --- CLI smoke test ---
+
+
+def test_chunk_documents_mcd_uses_lcd_chunk_size(tmp_path: Path) -> None:
+    """MCD source docs are chunked with the larger LCD chunk size/overlap."""
+    (tmp_path / "mcd" / "lcd").mkdir(parents=True)
+    long_text = ("LCD policy text about coverage criteria. " * 100).strip()
+    (tmp_path / "mcd" / "lcd" / "L12345.txt").write_text(long_text)
+    (tmp_path / "mcd" / "lcd" / "L12345.meta.json").write_text(
+        json.dumps({"source": "mcd", "doc_id": "mcd_lcd_L12345", "lcd_id": "L12345"})
+    )
+
+    small_chunks = chunk_documents(
+        tmp_path, source="mcd", lcd_chunk_size=200, lcd_chunk_overlap=50
+    )
+    large_chunks = chunk_documents(
+        tmp_path, source="mcd", lcd_chunk_size=1500, lcd_chunk_overlap=300
+    )
+    assert len(small_chunks) > len(large_chunks)
+    for d in large_chunks:
+        assert d.metadata.get("source") == "mcd"
+        assert "chunk_index" in d.metadata
+
+
+def test_chunk_documents_iom_not_affected_by_lcd_settings(tmp_path: Path) -> None:
+    """IOM docs should use the standard chunk_size, not lcd_chunk_size."""
+    (tmp_path / "iom" / "100-02").mkdir(parents=True)
+    long_text = ("IOM policy text paragraph. " * 100).strip()
+    (tmp_path / "iom" / "100-02" / "ch6.txt").write_text(long_text)
+    (tmp_path / "iom" / "100-02" / "ch6.meta.json").write_text(
+        json.dumps({"source": "iom", "manual": "100-02", "chapter": "6", "doc_id": "iom_100-02_ch6"})
+    )
+
+    docs_small_lcd = chunk_documents(
+        tmp_path, source="iom", chunk_size=200, chunk_overlap=50,
+        lcd_chunk_size=200, lcd_chunk_overlap=50,
+    )
+    docs_large_lcd = chunk_documents(
+        tmp_path, source="iom", chunk_size=200, chunk_overlap=50,
+        lcd_chunk_size=5000, lcd_chunk_overlap=500,
+    )
+    assert len(docs_small_lcd) == len(docs_large_lcd)
 
 
 def test_ingest_all_skip_extract_exits_zero(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

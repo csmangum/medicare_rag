@@ -98,6 +98,23 @@ if _chunk_overlap_raw < 0 or _chunk_overlap_raw >= CHUNK_SIZE:
 else:
     CHUNK_OVERLAP = _chunk_overlap_raw
 
+# LCD/MCD-specific chunking: larger chunks preserve more policy-text context
+LCD_CHUNK_SIZE = _safe_positive_int("LCD_CHUNK_SIZE", 1500)
+_lcd_overlap_raw = _safe_int("LCD_CHUNK_OVERLAP", 300)
+if _lcd_overlap_raw < 0 or _lcd_overlap_raw >= LCD_CHUNK_SIZE:
+    logger.warning(
+        "Invalid LCD_CHUNK_OVERLAP=%d (must be 0 <= overlap < LCD_CHUNK_SIZE=%d),"
+        " using default 300",
+        _lcd_overlap_raw,
+        LCD_CHUNK_SIZE,
+    )
+    LCD_CHUNK_OVERLAP = 300
+else:
+    LCD_CHUNK_OVERLAP = _lcd_overlap_raw
+
+# LCD retrieval: higher k for coverage-determination queries
+LCD_RETRIEVAL_K = _safe_positive_int("LCD_RETRIEVAL_K", 12)
+
 # Phase 4: local LLM (Hugging Face pipeline, runs with sentence-transformers stack)
 LOCAL_LLM_MODEL = os.environ.get(
     "LOCAL_LLM_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0"

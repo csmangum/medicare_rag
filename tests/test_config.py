@@ -3,6 +3,9 @@ import os
 from unittest.mock import patch
 
 from medicare_rag.config import (
+    LCD_CHUNK_OVERLAP,
+    LCD_CHUNK_SIZE,
+    LCD_RETRIEVAL_K,
     _safe_float,
     _safe_float_positive,
     _safe_int,
@@ -76,3 +79,22 @@ class TestSafeFloatPositive:
     def test_accepts_positive(self) -> None:
         with patch.dict(os.environ, {"_TEST_FLOAT_POS_OK": "30.5"}, clear=False):
             assert _safe_float_positive("_TEST_FLOAT_POS_OK", 60.0) == 30.5
+
+
+class TestLCDConfigDefaults:
+    def test_lcd_chunk_size_default(self) -> None:
+        assert LCD_CHUNK_SIZE >= 1
+        assert LCD_CHUNK_SIZE == 1500
+
+    def test_lcd_chunk_overlap_default(self) -> None:
+        assert LCD_CHUNK_OVERLAP >= 0
+        assert LCD_CHUNK_OVERLAP < LCD_CHUNK_SIZE
+        assert LCD_CHUNK_OVERLAP == 300
+
+    def test_lcd_retrieval_k_default(self) -> None:
+        assert LCD_RETRIEVAL_K >= 1
+        assert LCD_RETRIEVAL_K == 12
+
+    def test_lcd_chunk_size_larger_than_standard(self) -> None:
+        from medicare_rag.config import CHUNK_SIZE
+        assert LCD_CHUNK_SIZE > CHUNK_SIZE
