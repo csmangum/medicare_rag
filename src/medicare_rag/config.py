@@ -81,6 +81,10 @@ GET_META_BATCH_SIZE = _safe_positive_int("GET_META_BATCH_SIZE", 500)
 # Download timeout (seconds; must be > 0)
 DOWNLOAD_TIMEOUT = _safe_float_positive("DOWNLOAD_TIMEOUT", 60.0)
 
+# MCD CSV max field size (bytes; must be >= 1). Very large policy/narrative fields may exceed
+# Python's default; set high enough for real exports but bounded to limit blast radius.
+CSV_FIELD_SIZE_LIMIT = _safe_positive_int("CSV_FIELD_SIZE_LIMIT", 10 * 1024 * 1024)
+
 # Chunking defaults (size >= 1; overlap in [0, size))
 CHUNK_SIZE = _safe_positive_int("CHUNK_SIZE", 1000)
 _chunk_overlap_raw = _safe_int("CHUNK_OVERLAP", 200)

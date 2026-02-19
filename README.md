@@ -86,6 +86,8 @@ python scripts/validate_and_eval.py --eval-only --json  # metrics as JSON
 python scripts/run_rag_eval.py [--eval-file scripts/eval_questions.json] [--out data/rag_eval_report.md] [-k 8]
 ```
 
+The latest report is written to `data/rag_eval_report.md` and includes answer-quality heuristics (e.g. avg keyword coverage 56.9%, % answers with citations 6%, repetition ratio, length) for manual assessment.
+
 ### 5. Embedding search UI (optional)
 
 ```bash
@@ -169,46 +171,46 @@ This provides the semantic bridge that allows natural-language queries like "Wha
 
 | Metric | Value |
 |--------|-------|
-| **Hit Rate** | **73.0%** (46/63) |
-| **MRR** | **0.6090** |
-| **Avg Precision@5** | **0.5175** |
-| **Avg NDCG@5** | **0.9229** |
-| Median latency | 6 ms |
-| p95 latency | 8 ms |
+| **Hit Rate** | **76.2%** (48/63) |
+| **MRR** | **0.6646** |
+| **Avg Precision@5** | **0.5619** |
+| **Avg NDCG@5** | **0.9413** |
+| Median latency | 4 ms |
+| p95 latency | 5 ms |
 
 #### Performance by category
 
 | Category | n | Hit Rate | MRR | P@k | NDCG@k |
 |----------|---|----------|-----|-----|--------|
 | claims_billing | 6 | 100% | 1.000 | 0.933 | 0.979 |
-| cross_source | 4 | 100% | 1.000 | 0.950 | 0.987 |
+| coding_modifiers | 5 | 100% | 1.000 | 0.800 | 0.993 |
+| compliance | 3 | 100% | 0.611 | 0.467 | 0.925 |
+| consistency | 4 | 100% | 1.000 | 0.650 | 0.982 |
+| cross_source | 4 | 100% | 1.000 | 1.000 | 1.000 |
 | payment | 3 | 100% | 1.000 | 0.867 | 0.982 |
-| consistency | 4 | 100% | 0.667 | 0.500 | 0.964 |
-| compliance | 3 | 100% | 0.556 | 0.400 | 0.915 |
-| coding_modifiers | 5 | 80% | 0.800 | 0.600 | 0.981 |
+| policy_coverage | 6 | 83% | 0.583 | 0.567 | 0.965 |
 | edge_case | 4 | 75% | 0.500 | 0.450 | 0.971 |
-| policy_coverage | 6 | 67% | 0.500 | 0.433 | 0.974 |
-| semantic_retrieval | 5 | 60% | 0.500 | 0.320 | 0.975 |
+| appeals_denials | 5 | 60% | 0.467 | 0.400 | 0.974 |
 | abbreviation | 5 | 60% | 0.340 | 0.280 | 0.950 |
-| appeals_denials | 5 | 60% | 0.467 | 0.400 | 0.943 |
-| **code_lookup** | **7** | **57%** | **0.500** | **0.486** | **0.680** |
-| lcd_policy | 6 | 33% | 0.333 | 0.267 | 0.839 |
+| semantic_retrieval | 5 | 60% | 0.500 | 0.320 | 0.968 |
+| **code_lookup** | **7** | **57%** | **0.571** | **0.486** | **0.695** |
+| lcd_policy | 6 | 33% | 0.333 | 0.267 | 0.969 |
 
 #### Performance by expected source
 
 | Source | n | Hit Rate | MRR | P@k | NDCG@k |
 |--------|---|----------|-----|-----|--------|
-| iom | 52 | 81% | 0.671 | 0.562 | 0.967 |
-| codes | 18 | 72% | 0.667 | 0.578 | 0.860 |
-| mcd | 16 | 69% | 0.573 | 0.487 | 0.922 |
+| iom | 52 | 85% | 0.728 | 0.615 | 0.973 |
+| codes | 18 | 78% | 0.750 | 0.644 | 0.872 |
+| mcd | 16 | 69% | 0.656 | 0.525 | 0.973 |
 
 #### Performance by difficulty
 
 | Difficulty | n | Hit Rate | MRR | P@k | NDCG@k |
 |------------|---|----------|-----|-----|--------|
-| medium | 38 | 79% | 0.662 | 0.553 | 0.967 |
+| medium | 38 | 84% | 0.754 | 0.621 | 0.971 |
 | easy | 9 | 67% | 0.556 | 0.511 | 0.758 |
-| hard | 16 | 62% | 0.512 | 0.438 | 0.911 |
+| hard | 16 | 62% | 0.512 | 0.450 | 0.973 |
 
 ### Key Findings
 
@@ -226,7 +228,7 @@ This provides the semantic bridge that allows natural-language queries like "Wha
 
 **Weaknesses and areas for improvement:**
 
-1. **LCD-specific queries remain weak (33% hit rate).** The main `lcd.csv` file with full LCD policy text exceeds Python's CSV field size limit and is not parsed. Only structural/relational MCD data is indexed.
+1. **LCD-specific queries remain weak (33% hit rate).** The main `lcd.csv` file with full LCD policy text is now ingested (CSV field size limit increased via `CSV_FIELD_SIZE_LIMIT` and long-text column handling). Full LCD policy documents are indexed; the lcd_policy eval category still shows 33% hit rate—query/chunk tuning may improve this further.
 
 2. **ICD-10-CM queries fail (no data).** Hypertension, chest pain, and diabetes foot ulcer ICD-10 queries cannot succeed without downloading ICD-10-CM data (requires `ICD10_CM_ZIP_URL`). The enrichment module is ready to tag these codes when data is available.
 
@@ -236,15 +238,17 @@ This provides the semantic bridge that allows natural-language queries like "Wha
 
 1. ~~**Improve code document embeddings.**~~ **Done.** Semantic enrichment now prepends category labels and related terms to HCPCS/ICD-10 documents. Code lookup hit rate improved from 14% to 57%.
 
-2. **Parse full LCD text.** Increase Python's CSV field size limit to ingest the main `lcd.csv` file, which contains the full LCD policy text. This would dramatically improve LCD-specific retrieval.
+2. ~~**Parse full LCD text.**~~ **Done.** We finished this: the ingest pipeline raises the CSV field size limit (configurable `CSV_FIELD_SIZE_LIMIT`, default 10 MB) and treats long-text columns (e.g. Body, policy, coverage criteria) so that `lcd.csv` and other MCD CSVs with large HTML policy text are fully parsed and indexed.
 
-3. **Add ICD-10-CM data.** Set `ICD10_CM_ZIP_URL` in `.env` to download and index ICD-10-CM codes. The enrichment module already supports ICD-10-CM chapter tagging.
+3. **Improve LCD retrieval.** Now that full LCD policy text is indexed, tune chunk size/overlap or retrieval (e.g. query expansion, LCD-specific k) to raise the lcd_policy eval hit rate above 33%.
 
-4. **Upgrade the LLM.** Replace TinyLlama with a larger model (e.g., Mistral-7B, Llama-3-8B) for better answer synthesis, reduced repetition, and proper citation formatting.
+4. **Add ICD-10-CM data.** Set `ICD10_CM_ZIP_URL` in `.env` to download and index ICD-10-CM codes. The enrichment module already supports ICD-10-CM chapter tagging.
 
-5. **Improve cross-source retrieval.** Consider query expansion or hybrid search (keyword + semantic) to improve recall for queries that span IOM, MCD, and codes sources.
+5. **Upgrade the LLM.** Replace TinyLlama with a larger model (e.g., Mistral-7B, Llama-3-8B) for better answer synthesis, reduced repetition, and proper citation formatting.
 
-6. **Boost consistency.** For topics with fragmented content (like cardiac rehab), consider adding document-level summaries or topic clusters to improve retrieval stability across rephrasings.
+6. **Improve cross-source retrieval.** Consider query expansion or hybrid search (keyword + semantic) to improve recall for queries that span IOM, MCD, and codes sources.
+
+7. **Boost consistency.** For topics with fragmented content (like cardiac rehab), consider adding document-level summaries or topic clusters to improve retrieval stability across rephrasings.
 
 ## Configuration
 
@@ -260,6 +264,7 @@ Copy `.env.example` to `.env` and override as needed:
 | `LOCAL_LLM_REPETITION_PENALTY` | Repetition penalty (default: 1.05). Invalid values fall back to default with a warning. |
 | `ICD10_CM_ZIP_URL` | Optional; for ICD-10-CM code download |
 | `DOWNLOAD_TIMEOUT` | HTTP timeout in seconds for downloads (default: 60) |
+| `CSV_FIELD_SIZE_LIMIT` | Max CSV field size in bytes for MCD ingestion (default: 10 MB). Increase if very large policy fields are truncated. |
 | `CHUNK_SIZE`, `CHUNK_OVERLAP` | Text splitter defaults (1000 and 200). Optional tuning. |
 
 ## Testing

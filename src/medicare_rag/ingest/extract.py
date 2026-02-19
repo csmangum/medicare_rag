@@ -7,6 +7,7 @@ import csv
 import json
 import logging
 import re
+import sys
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -15,6 +16,7 @@ from xml.etree.ElementTree import Element
 import pdfplumber
 from bs4 import BeautifulSoup
 
+from medicare_rag.config import CSV_FIELD_SIZE_LIMIT
 from medicare_rag.ingest import SourceKind
 from medicare_rag.ingest.enrich import enrich_hcpcs_text, enrich_icd10_text
 
@@ -27,6 +29,80 @@ logger = logging.getLogger(__name__)
 
 # Minimum chars per page to consider pdfplumber extraction "good"
 _PDF_MIN_CHARS_PER_PAGE = 50
+
+_CSV_FIELD_LIMIT_INITIALIZED = False
+
+
+def _ensure_csv_field_size_limit() -> int:
+    """Increase Python's global CSV max field size to handle very large text fields.
+
+    Python's built-in csv module has a process-wide per-field size limit. Calling this
+    function raises that limit for all subsequent CSV parsing done in this process
+    (for example, when reading MCD LCD, NCD, and Article CSV exports that may contain
+    very large HTML policy or narrative text). Uses a bounded limit from config to
+    reduce blast radius from malformed inputs.
+    """
+    global _CSV_FIELD_LIMIT_INITIALIZED
+    if _CSV_FIELD_LIMIT_INITIALIZED:
+        return csv.field_size_limit()
+
+    desired = min(CSV_FIELD_SIZE_LIMIT, sys.maxsize)
+    while desired > 0:
+        try:
+            csv.field_size_limit(desired)
+            _CSV_FIELD_LIMIT_INITIALIZED = True
+            limit = csv.field_size_limit()
+            logger.info("CSV field size limit set to %d bytes", limit)
+            return limit
+        except OverflowError:
+            desired = int(desired / 2)
+    current_limit = csv.field_size_limit()
+    logger.warning(
+        "Could not increase CSV field size limit to desired value on this "
+        "platform; continuing with current limit %d.",
+        current_limit,
+    )
+    _CSV_FIELD_LIMIT_INITIALIZED = True
+    return current_limit
+
+
+_MCD_LONG_TEXT_KEY_TOKEN_SET = frozenset({
+    "body",
+    "text",
+    "policy",
+    "content",
+    "description",
+    "summary",
+    "indication",
+    "coverage",
+    "criteria",
+    "limitation",
+    "documentation",
+    "rationale",
+    "explanation",
+    "note",
+    "comment",
+    "narrative",
+    "narrativetext",
+})
+
+
+def _is_mcd_long_text_key(k: str) -> bool:
+    """Heuristically determine if a CSV header key is likely to contain long free text.
+
+    Tokenize on non-alphanumeric characters so that underscore-separated names
+    like "policy_text" or "coverage_criteria" are matched, while explicitly
+    excluding obvious date-like fields such as "policy_date".
+    """
+    kl = (k or "").strip().lower()
+    if not kl:
+        return False
+    if kl.endswith("_date") or kl.endswith(" date"):
+        return False
+    if kl.endswith("_datetime") or kl.endswith(" datetime"):
+        return False
+    tokens = re.split(r"[^a-z0-9]+", kl)
+    return any(t in _MCD_LONG_TEXT_KEY_TOKEN_SET for t in tokens if t)
 
 
 def _meta_schema(
@@ -186,6 +262,17 @@ def _html_to_text(html: str) -> str:
     if not html or not html.strip():
         return ""
     soup = BeautifulSoup(html, "html.parser")
+    # Convert tables to pipe-delimited rows so LCD coverage criteria tables stay readable
+    for table in soup.find_all("table"):
+        rows = []
+        for tr in table.find_all("tr"):
+            cells = [
+                cell.get_text(separator=" ", strip=True)
+                for cell in tr.find_all(["th", "td"])
+            ]
+            if cells:
+                rows.append(" | ".join(cells))
+        table.replace_with("\n".join(rows))
     return soup.get_text(separator="\n", strip=True)
 
 
@@ -195,9 +282,29 @@ def _cell_to_text(k: str, v: str) -> str | None:
         return None
     s = str(v)
     if "<" in s and ">" in s:
-        return _html_to_text(s)
+        txt = _html_to_text(s)
+        if not txt:
+            logger.debug(
+                "HTML field %r parsed to empty text (%d raw chars)",
+                k,
+                len(s),
+            )
+            return None
+        if _is_mcd_long_text_key(k):
+            return f"{k}:\n{txt}"
+        # After HTML extraction, apply same size/key rule as plain text: drop large content for non-long-text keys
+        if len(txt) >= 500:
+            return None
+        return txt
     if len(s) < 500:
         return f"{k}: {v}"
+    if _is_mcd_long_text_key(k):
+        logger.debug(
+            "Including large non-HTML field for key '%s' with length %d characters",
+            k,
+            len(s),
+        )
+        return f"{k}:\n{s}"
     return None
 
 
@@ -240,6 +347,7 @@ def extract_mcd(processed_dir: Path, raw_dir: Path, *, force: bool = False) -> l
         logger.warning("MCD raw dir not found: %s", mcd_dir)
         return []
     written: list[tuple[Path, Path]] = []
+    _ensure_csv_field_size_limit()
     # Map inner zip name -> output subtype and id column
     zip_config = [
         ("current_lcd.zip", "lcd", "LCD_ID", "lcd_id"),
