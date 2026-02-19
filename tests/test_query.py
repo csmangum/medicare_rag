@@ -385,6 +385,19 @@ class TestLCDAwareRetriever:
         for mc in mcd_calls:
             assert mc.kwargs["filter"]["source"] == "mcd"
 
+    def test_lcd_query_with_non_mcd_source_filter_skips_lcd_aware_retrieval(self):
+        """When metadata_filter specifies a non-MCD source, LCD-aware retrieval
+        is skipped and standard similarity search is used instead."""
+        store = self._make_mock_store()
+        retriever = LCDAwareRetriever(
+            store=store, k=5, lcd_k=12, metadata_filter={"source": "iom"}
+        )
+        retriever.invoke("LCD cardiac rehab coverage")
+        # Should only make one call with the IOM filter, not multiple MCD calls
+        store.similarity_search.assert_called_once_with(
+            "LCD cardiac rehab coverage", k=5, filter={"source": "iom"}
+        )
+
 
 def test_run_eval_returns_metrics_for_one_question(tmp_path: Path) -> None:
     """Phase 5: retrieval eval path run_eval returns expected metrics structure."""
