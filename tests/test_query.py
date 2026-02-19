@@ -10,6 +10,7 @@ from medicare_rag.index.store import upsert_documents
 from medicare_rag.query.retriever import (
     LCDAwareRetriever,
     _deduplicate_docs,
+    _strip_to_medical_concept,
     expand_lcd_query,
     is_lcd_query,
 )
@@ -220,6 +221,43 @@ class TestExpandLcdQuery:
         queries = expand_lcd_query("wound care coverage")
         combined = " ".join(queries)
         assert "wound" in combined.lower()
+
+    def test_includes_stripped_concept_query(self):
+        queries = expand_lcd_query(
+            "Does Novitas (JL) have an LCD for cardiac rehab?"
+        )
+        assert len(queries) >= 3
+        assert any("cardiac rehab" in q.lower() and "novitas" not in q.lower()
+                    for q in queries)
+
+
+class TestStripToMedicalConcept:
+
+    def test_strips_contractor_and_lcd_terms(self):
+        result = _strip_to_medical_concept(
+            "Does Novitas (JL) have an LCD for cardiac rehab?"
+        )
+        assert "novitas" not in result.lower()
+        assert "lcd" not in result.lower()
+        assert "cardiac rehab" in result.lower()
+
+    def test_strips_ncd_terms(self):
+        result = _strip_to_medical_concept(
+            "What are the national coverage determination criteria?"
+        )
+        assert "national coverage determination" not in result.lower()
+        assert "criteria" in result.lower()
+
+    def test_preserves_medical_terms(self):
+        result = _strip_to_medical_concept(
+            "LCD coverage for advanced imaging MRI"
+        )
+        assert "imaging" in result.lower()
+        assert "mri" in result.lower()
+
+    def test_empty_after_strip_returns_empty(self):
+        result = _strip_to_medical_concept("LCD NCD MCD")
+        assert result == "" or not result.strip()
 
 
 # ---------------------------------------------------------------------------

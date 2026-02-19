@@ -66,11 +66,38 @@ def is_lcd_query(query: str) -> bool:
     return any(p.search(query) for p in _LCD_QUERY_PATTERNS)
 
 
+_STRIP_LCD_NOISE = re.compile(
+    r"\b(?:lcd|lcds|ncd|mcd|local coverage determination|"
+    r"national coverage determination|coverage determination|"
+    r"novitas|first coast|cgs|ngs|wps|palmetto|noridian|"
+    r"contractor|jurisdiction|"
+    r"[jJ][a-lA-L])\b",
+    re.IGNORECASE,
+)
+_STRIP_FILLER = re.compile(
+    r"\b(?:does|have|has|an|the|for|is|are|what|which|apply to)\b",
+    re.IGNORECASE,
+)
+
+
+def _strip_to_medical_concept(query: str) -> str:
+    """Remove LCD jargon, contractor names, and filler words to isolate
+    the medical concept from a coverage-determination query."""
+    cleaned = _STRIP_LCD_NOISE.sub("", query)
+    cleaned = _STRIP_FILLER.sub("", cleaned)
+    cleaned = re.sub(r"[()]+", " ", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" ?.,;:")
+    return cleaned
+
+
 def expand_lcd_query(query: str) -> list[str]:
     """Return a list of expanded/reformulated queries for LCD retrieval.
 
-    Always returns the original query plus one or more reformulations
-    designed to better match LCD policy text in the vector store.
+    Produces up to three variants:
+      1. The original query (unchanged).
+      2. Original + topic-specific expansion terms.
+      3. A stripped medical-concept query (contractor/LCD terms removed)
+         so the embedding focuses on the clinical topic.
     """
     queries = [query]
 
@@ -82,8 +109,13 @@ def expand_lcd_query(query: str) -> list[str]:
         queries.append(f"{query} {' '.join(topic_expansions)}")
     else:
         queries.append(
-            f"{query} Local Coverage Determination LCD policy coverage criteria"
+            f"{query} Local Coverage Determination LCD policy"
+            " coverage criteria"
         )
+
+    concept = _strip_to_medical_concept(query)
+    if concept and concept.lower() != query.lower():
+        queries.append(concept)
 
     return queries
 
@@ -91,12 +123,22 @@ def expand_lcd_query(query: str) -> list[str]:
 def _deduplicate_docs(
     doc_lists: list[list[Document]], max_k: int,
 ) -> list[Document]:
-    """Merge doc lists, preserving order and deduplicating by doc_id+chunk_index."""
+    """Merge doc lists via round-robin interleaving, deduplicating by
+    doc_id+chunk_index.  This ensures each query variant contributes
+    docs near the top of the final list rather than one variant
+    dominating all slots."""
     seen: set[str] = set()
     merged: list[Document] = []
-    for docs in doc_lists:
-        for doc in docs:
-            key = f"{doc.metadata.get('doc_id', '')}_{doc.metadata.get('chunk_index', 0)}"
+    max_len = max((len(dl) for dl in doc_lists), default=0)
+    for pos in range(max_len):
+        for dl in doc_lists:
+            if pos >= len(dl):
+                continue
+            doc = dl[pos]
+            key = (
+                f"{doc.metadata.get('doc_id', '')}"
+                f"_{doc.metadata.get('chunk_index', 0)}"
+            )
             if key not in seen:
                 seen.add(key)
                 merged.append(doc)
@@ -137,29 +179,32 @@ class LCDAwareRetriever(BaseRetriever):
         return self.store.similarity_search(query, **search_kwargs)
 
     def _lcd_retrieve(self, query: str) -> list[Document]:
-        base_kwargs: dict = {"k": self.lcd_k}
-        if self.metadata_filter is not None:
-            base_kwargs["filter"] = self.metadata_filter
-
-        base_docs = self.store.similarity_search(query, **base_kwargs)
-
         mcd_filter = {"source": "mcd"}
         if self.metadata_filter is not None:
             mcd_filter = {**self.metadata_filter, "source": "mcd"}
+
+        per_variant = max(4, self.lcd_k // 3)
+
         mcd_docs = self.store.similarity_search(
-            query, k=self.lcd_k, filter=mcd_filter
+            query, k=per_variant, filter=mcd_filter
         )
 
         expanded_queries = expand_lcd_query(query)
-        expanded_docs: list[Document] = []
+        variant_results: list[list[Document]] = []
         for eq in expanded_queries[1:]:
-            expanded_docs.extend(
-                self.store.similarity_search(eq, **base_kwargs)
+            variant_results.append(
+                self.store.similarity_search(
+                    eq, k=per_variant, filter=mcd_filter,
+                )
             )
 
-        return _deduplicate_docs(
-            [base_docs, mcd_docs, expanded_docs], max_k=self.lcd_k
-        )
+        base_kwargs: dict = {"k": per_variant}
+        if self.metadata_filter is not None:
+            base_kwargs["filter"] = self.metadata_filter
+        base_docs = self.store.similarity_search(query, **base_kwargs)
+
+        doc_lists = [mcd_docs] + variant_results + [base_docs]
+        return _deduplicate_docs(doc_lists, max_k=self.lcd_k)
 
 
 def get_retriever(
