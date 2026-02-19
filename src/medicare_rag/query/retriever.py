@@ -34,7 +34,7 @@ _LCD_QUERY_PATTERNS: list[re.Pattern[str]] = [
         r"\bpalmetto\b",
         r"\bnoridian\b",
         # Jurisdiction codes
-        r"\b[jJ][a-lA-L]\b",
+        r"\b[jJ][a-l]\b",
         # Coverage + specific therapy patterns common in LCD queries
         r"\bcover(?:ed)?\b.{0,40}\b(?:wound|hyperbaric|oxygen therapy|infusion|"
         r"imaging|MRI|CT scan|ultrasound|physical therapy|"
@@ -152,10 +152,13 @@ class LCDAwareRetriever(BaseRetriever):
 
     For non-LCD queries, delegates to standard similarity search with ``k`` results.
     For LCD queries:
-      1. Runs the original query with a higher k (``lcd_k``).
-      2. Runs a source-filtered query (source=mcd) to guarantee MCD docs appear.
-      3. Runs expanded/reformulated queries to capture variant phrasing.
-      4. Merges and deduplicates, returning up to ``lcd_k`` results.
+      1. Computes a per-variant ``k`` as ``max(4, lcd_k // 3)``.
+      2. Runs the original query restricted to MCD source with this per-variant ``k``.
+      3. Runs expanded/reformulated MCD queries, each with the same per-variant ``k``.
+      4. Runs the original query with the general metadata filter (if any) using the
+         per-variant ``k``.
+      5. Merges and deduplicates results from all variants, returning up to ``lcd_k``
+         documents.
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -179,6 +182,12 @@ class LCDAwareRetriever(BaseRetriever):
         return self.store.similarity_search(query, **search_kwargs)
 
     def _lcd_retrieve(self, query: str) -> list[Document]:
+        # If metadata_filter explicitly specifies a non-MCD source, skip LCD-aware
+        # retrieval to honor the user's source filter
+        if self.metadata_filter is not None and self.metadata_filter.get("source") not in (None, "mcd"):
+            search_kwargs = {"k": self.k, "filter": self.metadata_filter}
+            return self.store.similarity_search(query, **search_kwargs)
+
         mcd_filter = {"source": "mcd"}
         if self.metadata_filter is not None:
             mcd_filter = {**self.metadata_filter, "source": "mcd"}
