@@ -55,8 +55,8 @@ _LCD_TOPIC_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         (r"\bcardiac\s*rehab", "cardiac rehabilitation program coverage criteria"),
         (r"\bhyperbaric\s*oxygen", "hyperbaric oxygen therapy wound healing coverage indications"),
         (r"\bphysical therapy", "outpatient physical therapy rehabilitation coverage"),
-        (r"\bwound\s*care|wound\s*vac", "wound care negative pressure therapy coverage"),
-        (r"\bimaging|MRI|CT\s*scan", "advanced diagnostic imaging coverage medical necessity"),
+        (r"\b(?:wound\s*care|wound\s*vac)", "wound care negative pressure therapy coverage"),
+        (r"\b(?:imaging|MRI|CT\s*scan)", "advanced diagnostic imaging coverage medical necessity"),
     ]
 ]
 
