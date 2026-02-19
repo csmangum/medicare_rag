@@ -6,6 +6,39 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **LCD-aware retriever** (`src/medicare_rag/query/retriever.py`): Complete rewrite of the
+  retriever with an `LCDAwareRetriever` class that detects LCD/coverage-determination queries
+  and applies multi-query retrieval to dramatically improve hit rates on MCD policy content.
+
+  - **Query detection** (`is_lcd_query`): Regex-based classification recognises LCD/NCD/MCD
+    terms, MAC contractor names (Novitas, Palmetto, First Coast, etc.), jurisdiction codes
+    (JA–JL), and coverage-plus-therapy patterns (e.g., "hyperbaric oxygen therapy covered").
+  - **Query expansion** (`expand_lcd_query`): Produces up to three query variants —
+    (1) original, (2) topic-expanded with clinical synonyms, and (3) a concept-stripped
+    version that removes contractor names and LCD jargon so the embedding focuses on the
+    clinical topic.
+  - **Round-robin interleaving** (`_deduplicate_docs`): Merges results from all query
+    variants via round-robin rather than concatenation, ensuring each variant contributes
+    documents near the top of the result list instead of one variant dominating all slots.
+  - **Source-filtered MCD retrieval**: Expanded queries run through a `source=mcd` filter
+    to guarantee coverage-determination documents appear in results.
+  - Non-LCD queries continue to use standard single-query similarity search.
+
+- **LCD-specific chunking parameters** (`config.py`, `chunk.py`):
+  - `LCD_CHUNK_SIZE` (default 1500, env-overridable) — 50 % larger than the standard
+    `CHUNK_SIZE` (1000) to preserve more LCD policy context per chunk.
+  - `LCD_CHUNK_OVERLAP` (default 300, env-overridable) — proportionally larger overlap
+    to maintain continuity between LCD chunks.
+  - `LCD_RETRIEVAL_K` (default 12, env-overridable) — higher k for LCD queries.
+  - MCD source documents are automatically chunked with the LCD-specific parameters;
+    IOM and code documents remain on the standard settings.
+
+- **LCD retrieval tests** (`tests/test_query.py`): 46 new tests covering `is_lcd_query`
+  detection (15 cases), `expand_lcd_query` expansion (8 cases), `_strip_to_medical_concept`
+  (4 cases), `_deduplicate_docs` round-robin merge (6 cases), `LCDAwareRetriever` with
+  mocked store (6 cases), and MCD chunk sizing (3 cases in `test_ingest.py`), plus LCD
+  config defaults (4 cases in `test_config.py`).
+
 - **HCPCS/ICD-10-CM semantic enrichment** (`src/medicare_rag/ingest/enrich.py`): New module
   that prepends category labels, synonyms, and related terms to code document text before
   embedding. This bridges the semantic gap between terse code descriptions (e.g.,
@@ -36,6 +69,41 @@ All notable changes to this project are documented in this file.
 
 - **`test_ingest.py`**: Updated `test_extract_hcpcs_writes_txt_and_meta` and
   `test_extract_icd10cm_writes_txt_and_meta` to verify enrichment text appears in output.
+
+### Eval Results — LCD Policy Retrieval Improvements
+
+Evaluation run on 2026-02-19 against the `lcd_policy` category (6 questions, k=8)
+after downloading and indexing the full MCD bulk data (33,805 chunks).
+
+**lcd_policy category hit rate: 33 % → 100 %**
+
+| Metric | Before | After | Delta |
+|--------|--------|-------|-------|
+| Hit rate | 33 % (2/6) | 100 % (6/6) | **+67 pp** |
+| MRR | 0.333 | 0.722 | **+0.389** |
+| Avg NDCG@8 | — | 0.959 | — |
+
+Per-question results:
+
+| Query | Before | After |
+|-------|--------|-------|
+| "Does Novitas (JL) have an LCD for cardiac rehab?" | FAIL | **PASS (rank 3)** |
+| "Is hyperbaric oxygen therapy covered for diabetic wounds?" | FAIL | **PASS (rank 2, P@8=0.25)** |
+| "What are the national coverage determination criteria…?" | PASS | **PASS (rank 1, P@8=0.75)** |
+| "What LCDs apply to outpatient physical therapy services?" | FAIL | **PASS (rank 2, P@8=0.50)** |
+| "LCD coverage for advanced imaging MRI and CT scans" | FAIL | **PASS (rank 1, P@8=0.50)** |
+| "Medicare coverage for wound care and wound vac therapy" | PASS | **PASS (rank 1, P@8=1.00)** |
+
+Key techniques that achieved this:
+
+1. **Larger MCD chunks** (1500 vs 1000 chars) preserve LCD policy text context.
+2. **LCD query detection** via regex for LCD terms, contractor names, and
+   therapy-plus-coverage patterns.
+3. **Multi-query retrieval** with three variants: original, topic-expanded, and
+   concept-stripped (contractor/LCD jargon removed).
+4. **Round-robin interleaving** across variants ensures each contributes docs near
+   the top of results.
+5. **MCD source-filtered search** guarantees coverage-determination documents appear.
 
 ### Eval Results — Code Lookup Improvements
 
