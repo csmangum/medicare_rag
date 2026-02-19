@@ -238,15 +238,17 @@ This provides the semantic bridge that allows natural-language queries like "Wha
 
 1. ~~**Improve code document embeddings.**~~ **Done.** Semantic enrichment now prepends category labels and related terms to HCPCS/ICD-10 documents. Code lookup hit rate improved from 14% to 57%.
 
-2. ~~**Parse full LCD text.**~~ **Done.** The ingest pipeline raises the CSV field size limit (configurable `CSV_FIELD_SIZE_LIMIT`, default 10 MB) and treats long-text columns (e.g. Body, policy, coverage criteria) so that `lcd.csv` and other MCD CSVs with large HTML policy text are fully parsed and indexed.
+2. ~~**Parse full LCD text.**~~ **Done.** We finished this: the ingest pipeline raises the CSV field size limit (configurable `CSV_FIELD_SIZE_LIMIT`, default 10 MB) and treats long-text columns (e.g. Body, policy, coverage criteria) so that `lcd.csv` and other MCD CSVs with large HTML policy text are fully parsed and indexed.
 
-3. **Add ICD-10-CM data.** Set `ICD10_CM_ZIP_URL` in `.env` to download and index ICD-10-CM codes. The enrichment module already supports ICD-10-CM chapter tagging.
+3. **Improve LCD retrieval.** Now that full LCD policy text is indexed, tune chunk size/overlap or retrieval (e.g. query expansion, LCD-specific k) to raise the lcd_policy eval hit rate above 33%.
 
-4. **Upgrade the LLM.** Replace TinyLlama with a larger model (e.g., Mistral-7B, Llama-3-8B) for better answer synthesis, reduced repetition, and proper citation formatting.
+4. **Add ICD-10-CM data.** Set `ICD10_CM_ZIP_URL` in `.env` to download and index ICD-10-CM codes. The enrichment module already supports ICD-10-CM chapter tagging.
 
-5. **Improve cross-source retrieval.** Consider query expansion or hybrid search (keyword + semantic) to improve recall for queries that span IOM, MCD, and codes sources.
+5. **Upgrade the LLM.** Replace TinyLlama with a larger model (e.g., Mistral-7B, Llama-3-8B) for better answer synthesis, reduced repetition, and proper citation formatting.
 
-6. **Boost consistency.** For topics with fragmented content (like cardiac rehab), consider adding document-level summaries or topic clusters to improve retrieval stability across rephrasings.
+6. **Improve cross-source retrieval.** Consider query expansion or hybrid search (keyword + semantic) to improve recall for queries that span IOM, MCD, and codes sources.
+
+7. **Boost consistency.** For topics with fragmented content (like cardiac rehab), consider adding document-level summaries or topic clusters to improve retrieval stability across rephrasings.
 
 ## Configuration
 
