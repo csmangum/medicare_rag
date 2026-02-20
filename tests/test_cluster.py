@@ -112,6 +112,18 @@ class TestAssignTopics:
         topics = assign_topics(doc)
         assert "cardiac_rehab" in topics
 
+    def test_als_diagnosis_not_ambulance(self):
+        """ALS (amyotrophic lateral sclerosis) should not match ambulance topic."""
+        doc = _doc("ALS diagnosis and treatment coverage under Medicare.")
+        topics = assign_topics(doc)
+        assert "ambulance" not in topics
+
+    def test_bureau_of_labor_statistics_not_ambulance(self):
+        """BLS (Bureau of Labor Statistics) should not match ambulance topic."""
+        doc = _doc("Bureau of Labor Statistics data on healthcare employment.")
+        topics = assign_topics(doc)
+        assert "ambulance" not in topics
+
 
 class TestClusterDocuments:
 

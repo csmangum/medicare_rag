@@ -21,7 +21,7 @@ from medicare_rag.ingest.cluster import (
 
 logger = logging.getLogger(__name__)
 
-_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n{2,}")
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z])|\n{2,}")
 _WORD_RE = re.compile(r"\w+")
 
 _STOPWORDS = frozenset({
@@ -61,7 +61,7 @@ def _score_sentences(
 
     doc_freq: Counter[str] = Counter()
     sent_tfs: list[Counter[str]] = []
-    n_docs = len(sentences)
+    n_sentences = len(sentences)
 
     for sent in sentences:
         tokens = _tokenize_lower(sent)
@@ -74,12 +74,12 @@ def _score_sentences(
         score = 0.0
         for term, count in tf.items():
             df = doc_freq.get(term, 1)
-            idf = math.log(1 + n_docs / df)
+            idf = math.log(1 + n_sentences / df)
             score += count * idf
         length_norm = max(1, len(_WORD_RE.findall(sent)))
         score /= length_norm
         # Small positional bonus for earlier sentences (often more important)
-        position_bonus = 1.0 + 0.1 * max(0, 1.0 - i / max(1, n_docs))
+        position_bonus = 1.0 + 0.1 * max(0, 1.0 - i / max(1, n_sentences))
         score *= position_bonus
         scored.append((score, i, sent))
 
@@ -192,6 +192,7 @@ def generate_topic_summary(
             "topic_label": label,
             "sources_in_cluster": ",".join(sources_in_cluster),
             "cluster_size": len(chunks),
+            "cluster_total_doc_ids": len(doc_ids_in_cluster),
             "cluster_doc_ids": ",".join(doc_ids_in_cluster[:20]),
         },
     )

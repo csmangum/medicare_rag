@@ -351,13 +351,12 @@ class HybridRetriever(BaseRetriever):
 
         fused = reciprocal_rank_fusion(all_lists, weights=weights, max_results=fetch_k)
 
-        relevance = detect_source_relevance(query)
-        diversified = ensure_source_diversity(fused, relevance, effective_k)
-
         query_topics = detect_query_topics(query)
         if query_topics:
-            diversified = boost_summaries(diversified, query_topics, effective_k)
+            fused = boost_summaries(fused, query_topics, fetch_k)
 
+        relevance = detect_source_relevance(query)
+        diversified = ensure_source_diversity(fused, relevance, effective_k)
         return diversified
 
 

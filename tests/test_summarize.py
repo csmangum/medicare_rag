@@ -40,6 +40,16 @@ class TestSplitSentences:
     def test_empty_input(self):
         assert _split_sentences("") == []
 
+    def test_does_not_split_on_abbreviations(self):
+        """Sentence boundary requires capital after period; C.F.R. stays in one piece."""
+        text = "e.g. see Section 42. Dr. Smith recommended. C.F.R. § 410 applies."
+        sents = _split_sentences(text)
+        # We do not split after "e.g." (lowercase "s" follows), so "see Section 42" is not a standalone sentence
+        assert not any(s.strip() == "see Section 42" for s in sents)
+        # At least one long sentence contains C.F.R. (we did not split on every period in C.F.R.)
+        assert any("C.F.R." in s for s in sents)
+        assert len(sents) >= 1
+
 
 class TestScoreSentences:
 

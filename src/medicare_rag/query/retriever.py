@@ -126,14 +126,9 @@ def expand_lcd_query(query: str) -> list[str]:
 
 def detect_query_topics(query: str) -> list[str]:
     """Return the list of topic cluster names relevant to the query."""
-    from medicare_rag.ingest.cluster import TOPIC_DEFINITIONS
+    from medicare_rag.ingest.cluster import assign_topics
 
-    topics: list[str] = []
-    for td in TOPIC_DEFINITIONS:
-        matches = sum(1 for p in td.patterns if p.search(query))
-        if matches >= td.min_pattern_matches:
-            topics.append(td.name)
-    return topics
+    return assign_topics(Document(page_content=query, metadata={}))
 
 
 def boost_summaries(

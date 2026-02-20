@@ -194,8 +194,8 @@ TOPIC_DEFINITIONS: list[TopicDef] = [
             r"\bambulance\b",
             r"\bemergency\s+(?:medical\s+)?transport\b",
             r"\bnon[- ]emergency\s+transport\b",
-            r"\bBLS\b",
-            r"\bALS\b",
+            r"\bBLS\s+(?:transport|ambulance|unit|crew|level)\b",
+            r"\bALS\s+(?:transport|ambulance|unit|crew|level|intercept)\b",
             r"\bparamedic\b",
         ]),
         summary_prefix="Ambulance Services: ",
@@ -213,6 +213,8 @@ TOPIC_DEFINITIONS: list[TopicDef] = [
         summary_prefix="Infusion Therapy: ",
     ),
 ]
+
+_TOPIC_DEF_MAP: dict[str, TopicDef] = {td.name: td for td in TOPIC_DEFINITIONS}
 
 
 def assign_topics(doc: Document) -> list[str]:
@@ -242,10 +244,7 @@ def cluster_documents(documents: list[Document]) -> dict[str, list[Document]]:
 
 def get_topic_def(name: str) -> TopicDef | None:
     """Look up a topic definition by name."""
-    for td in TOPIC_DEFINITIONS:
-        if td.name == name:
-            return td
-    return None
+    return _TOPIC_DEF_MAP.get(name)
 
 
 def tag_documents_with_topics(documents: list[Document]) -> list[Document]:
