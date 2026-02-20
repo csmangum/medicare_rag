@@ -5,7 +5,7 @@ from langchain_core.documents import Document
 
 from medicare_rag.query.retriever import (
     LCDAwareRetriever,
-    _boost_summaries,
+    boost_summaries,
     detect_query_topics,
 )
 
@@ -55,10 +55,12 @@ class TestBoostSummaries:
             topic_cluster="cardiac_rehab",
         )
         docs = [regular, summary]
-        boosted = _boost_summaries(docs, ["cardiac_rehab"], max_k=5)
+        boosted = boost_summaries(docs, ["cardiac_rehab"], max_k=5)
         assert boosted[0].metadata["doc_id"] == "topic_cardiac_rehab"
 
     def test_document_summary_with_matching_topic_clusters(self):
+        # document_summary docs get topic_clusters from tag_documents_with_topics
+        # in generate_all_summaries when their content matches topic patterns
         regular = _doc("Regular content", doc_id="d1")
         summary = _doc(
             "Document summary",
@@ -67,7 +69,7 @@ class TestBoostSummaries:
             topic_clusters="cardiac_rehab,imaging",
         )
         docs = [regular, summary]
-        boosted = _boost_summaries(docs, ["cardiac_rehab"], max_k=5)
+        boosted = boost_summaries(docs, ["cardiac_rehab"], max_k=5)
         assert boosted[0].metadata["doc_id"] == "summary_d2"
 
     def test_no_boost_for_irrelevant_topics(self):
@@ -79,7 +81,7 @@ class TestBoostSummaries:
             topic_cluster="wound_care",
         )
         docs = [regular, summary]
-        boosted = _boost_summaries(docs, ["cardiac_rehab"], max_k=5)
+        boosted = boost_summaries(docs, ["cardiac_rehab"], max_k=5)
         assert boosted[0].metadata["doc_id"] == "d1"
 
     def test_respects_max_k(self):
@@ -90,17 +92,17 @@ class TestBoostSummaries:
             doc_type="topic_summary",
             topic_cluster="cardiac_rehab",
         ))
-        boosted = _boost_summaries(docs, ["cardiac_rehab"], max_k=3)
+        boosted = boost_summaries(docs, ["cardiac_rehab"], max_k=3)
         assert len(boosted) == 3
         assert boosted[0].metadata["doc_id"] == "topic_cardiac_rehab"
 
     def test_empty_topics_no_change(self):
         docs = [_doc("content", doc_id="d1")]
-        boosted = _boost_summaries(docs, [], max_k=5)
+        boosted = boost_summaries(docs, [], max_k=5)
         assert len(boosted) == 1
 
     def test_empty_docs(self):
-        boosted = _boost_summaries([], ["cardiac_rehab"], max_k=5)
+        boosted = boost_summaries([], ["cardiac_rehab"], max_k=5)
         assert boosted == []
 
     def test_multiple_summaries_for_same_topic(self):
@@ -114,7 +116,7 @@ class TestBoostSummaries:
             doc_type="document_summary", topic_clusters="cardiac_rehab",
         )
         docs = [regular, s1, s2]
-        boosted = _boost_summaries(docs, ["cardiac_rehab"], max_k=5)
+        boosted = boost_summaries(docs, ["cardiac_rehab"], max_k=5)
         assert all(
             d.metadata.get("doc_type") in ("topic_summary", "document_summary")
             for d in boosted[:2]

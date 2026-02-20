@@ -119,7 +119,7 @@ class TestGenerateTopicSummary:
         assert summary.metadata["topic_cluster"] == "cardiac_rehab"
         assert summary.metadata["topic_label"] == "Cardiac Rehabilitation"
         assert "Cardiac Rehabilitation" in summary.page_content
-        assert "consolidated summary" in summary.page_content
+        assert "consolidated summary" in summary.page_content.lower()
 
     def test_includes_all_sources(self):
         chunks = [

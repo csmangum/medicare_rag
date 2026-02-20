@@ -172,10 +172,19 @@ def generate_topic_summary(
         c.metadata.get("doc_id", "") for c in chunks
     })
 
+    # Avoid duplicating the topic label when summary_prefix already includes it
+    if topic_def and topic_def.summary_prefix:
+        header = (
+            f"{prefix}Consolidated summary across "
+            f"{len(chunks)} chunks from {', '.join(sources_in_cluster)}. "
+        )
+    else:
+        header = (
+            f"{label} — consolidated summary across "
+            f"{len(chunks)} chunks from {', '.join(sources_in_cluster)}. "
+        )
     return Document(
-        page_content=f"{prefix}{label} — consolidated summary across "
-                     f"{len(chunks)} chunks from {', '.join(sources_in_cluster)}. "
-                     + summary_text,
+        page_content=header + summary_text,
         metadata={
             "doc_type": "topic_summary",
             "doc_id": f"topic_{topic_name}",

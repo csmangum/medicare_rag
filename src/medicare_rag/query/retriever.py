@@ -136,7 +136,7 @@ def detect_query_topics(query: str) -> list[str]:
     return topics
 
 
-def _boost_summaries(
+def boost_summaries(
     docs: list[Document],
     query_topics: list[str],
     max_k: int,
@@ -238,7 +238,7 @@ class LCDAwareRetriever(BaseRetriever):
         docs = self.store.similarity_search(query, **search_kwargs)
         query_topics = detect_query_topics(query)
         if query_topics:
-            docs = _boost_summaries(docs, query_topics, self.k)
+            docs = boost_summaries(docs, query_topics, self.k)
         return docs
 
     def _lcd_retrieve(self, query: str) -> list[Document]:
@@ -279,7 +279,7 @@ class LCDAwareRetriever(BaseRetriever):
         merged = _deduplicate_docs(doc_lists, max_k=self.lcd_k)
         query_topics = detect_query_topics(query)
         if query_topics:
-            merged = _boost_summaries(merged, query_topics, self.lcd_k)
+            merged = boost_summaries(merged, query_topics, self.lcd_k)
         return merged
 
 
