@@ -130,7 +130,8 @@ def detect_query_topics(query: str) -> list[str]:
 
     topics: list[str] = []
     for td in TOPIC_DEFINITIONS:
-        if any(p.search(query) for p in td.patterns):
+        matches = sum(1 for p in td.patterns if p.search(query))
+        if matches >= td.min_pattern_matches:
             topics.append(td.name)
     return topics
 
