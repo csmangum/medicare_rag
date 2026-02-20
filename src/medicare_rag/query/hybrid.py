@@ -17,6 +17,14 @@ import re
 import threading
 from typing import Any
 
+try:
+    from rank_bm25 import BM25Okapi
+
+    _HAS_BM25 = True
+except ImportError:
+    _HAS_BM25 = False
+    BM25Okapi = None
+
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
@@ -74,7 +82,8 @@ class BM25Index:
             self._build(collection)
 
     def _build(self, collection: Any) -> None:
-        from rank_bm25 import BM25Okapi
+        if not _HAS_BM25:
+            raise ImportError("rank-bm25 is required for BM25 indexing")
 
         all_docs: list[Document] = []
         offset = 0
@@ -91,9 +100,7 @@ class BM25Index:
             for i in range(len(ids)):
                 text = texts[i] if i < len(texts) else ""
                 meta = metas[i] if i < len(metas) else {}
-                all_docs.append(
-                    Document(page_content=text or "", metadata=meta or {})
-                )
+                all_docs.append(Document(page_content=text or "", metadata=meta or {}))
 
             if len(ids) < GET_META_BATCH_SIZE:
                 break
@@ -128,13 +135,9 @@ class BM25Index:
         scores = self._index.get_scores(tokens)
 
         scored: list[tuple[float, int, Document]] = []
-        for i, (doc, score) in enumerate(
-            zip(self._documents, scores, strict=False)
-        ):
+        for i, (doc, score) in enumerate(zip(self._documents, scores, strict=False)):
             if metadata_filter:
-                if not all(
-                    doc.metadata.get(k_) == v for k_, v in metadata_filter.items()
-                ):
+                if not all(doc.metadata.get(k_) == v for k_, v in metadata_filter.items()):
                     continue
             scored.append((score, i, doc))
 
@@ -172,10 +175,7 @@ def reciprocal_rank_fusion(
     for lst_idx, doc_list in enumerate(result_lists):
         w = weights[lst_idx] if lst_idx < len(weights) else 1.0
         for rank, doc in enumerate(doc_list):
-            key = (
-                f"{doc.metadata.get('doc_id', '')}"
-                f"_{doc.metadata.get('chunk_index', 0)}"
-            )
+            key = f"{doc.metadata.get('doc_id', '')}_{doc.metadata.get('chunk_index', 0)}"
             current_score = doc_scores.get(key, (0.0, doc))[0]
             rrf_score = w / (rrf_k + rank + 1)
             doc_scores[key] = (current_score + rrf_score, doc)
@@ -238,8 +238,8 @@ def ensure_source_diversity(
             if not displaced and len(top) < k:
                 pass
             elif not displaced:
-                top.pop(-1)
-                popped_src = docs[k - 1].metadata.get("source", "") if k <= len(docs) else ""
+                popped_doc = top.pop(-1)
+                popped_src = popped_doc.metadata.get("source", "")
                 source_counts[popped_src] = max(0, source_counts.get(popped_src, 0) - 1)
 
             top.append(promo)
@@ -300,9 +300,7 @@ class HybridRetriever(BaseRetriever):
             search_kwargs: dict[str, Any] = {"k": fetch_k}
             if self.metadata_filter is not None:
                 search_kwargs["filter"] = self.metadata_filter
-            semantic_lists.append(
-                self.store.similarity_search(variant, **search_kwargs)
-            )
+            semantic_lists.append(self.store.similarity_search(variant, **search_kwargs))
             keyword_lists.append(
                 _bm25_index.search(variant, k=fetch_k, metadata_filter=self.metadata_filter)
             )
@@ -325,13 +323,9 @@ class HybridRetriever(BaseRetriever):
 
         all_lists = semantic_lists + keyword_lists
         n_semantic = len(semantic_lists)
-        weights = [self.semantic_weight] * n_semantic + [self.keyword_weight] * len(
-            keyword_lists
-        )
+        weights = [self.semantic_weight] * n_semantic + [self.keyword_weight] * len(keyword_lists)
 
-        fused = reciprocal_rank_fusion(
-            all_lists, weights=weights, max_results=fetch_k
-        )
+        fused = reciprocal_rank_fusion(all_lists, weights=weights, max_results=fetch_k)
 
         relevance = detect_source_relevance(query)
         diversified = ensure_source_diversity(fused, relevance, effective_k)
