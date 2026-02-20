@@ -17,6 +17,7 @@ from langchain_core.retrievers import BaseRetriever
 
 from medicare_rag.config import LCD_RETRIEVAL_K
 from medicare_rag.index import get_embeddings, get_or_create_chroma
+from medicare_rag.index.store import get_raw_collection
 
 _LCD_QUERY_PATTERNS: list[re.Pattern[str]] = [
     re.compile(p, re.IGNORECASE)
@@ -171,6 +172,41 @@ def boost_summaries(
     return (boosted + rest)[:max_k]
 
 
+def inject_topic_summaries(
+    store: Any,
+    docs: list[Document],
+    query_topics: list[str],
+    max_k: int,
+) -> list[Document]:
+    """Prepend topic summary docs for detected topics when not already in docs.
+
+    Ensures stable anchor docs are always present in the candidate set before
+    boosting, fixing the fragmented content consistency gap when topic summaries
+    don't rank in top-k by similarity.
+    """
+    if not query_topics:
+        return docs[:max_k]
+
+    ids = [f"topic_{t}" for t in query_topics]
+    collection = get_raw_collection(store)
+    result = collection.get(ids=ids, include=["documents", "metadatas"])
+
+    returned_ids = result.get("ids") or []
+    texts = result.get("documents") or []
+    metas = result.get("metadatas") or []
+
+    injected: list[Document] = []
+    for i, cid in enumerate(returned_ids):
+        text = texts[i] if i < len(texts) else ""
+        meta = (metas[i] if i < len(metas) else None) or {}
+        injected.append(Document(page_content=text or "", metadata=dict(meta)))
+
+    existing_ids = {d.metadata.get("doc_id", "") for d in docs}
+    new_injected = [d for d in injected if d.metadata.get("doc_id", "") not in existing_ids]
+    combined = new_injected + docs
+    return combined[:max_k]
+
+
 def _deduplicate_docs(
     doc_lists: list[list[Document]], max_k: int,
 ) -> list[Document]:
@@ -233,8 +269,9 @@ class LCDAwareRetriever(BaseRetriever):
         docs = self.store.similarity_search(query, **search_kwargs)
         query_topics = detect_query_topics(query)
         if query_topics:
+            docs = inject_topic_summaries(self.store, docs, query_topics, self.k)
             docs = boost_summaries(docs, query_topics, self.k)
-        return docs
+        return docs[:self.k]
 
     def _lcd_retrieve(self, query: str) -> list[Document]:
         # If metadata_filter explicitly specifies a non-MCD source, skip LCD-aware
@@ -274,8 +311,9 @@ class LCDAwareRetriever(BaseRetriever):
         merged = _deduplicate_docs(doc_lists, max_k=self.lcd_k)
         query_topics = detect_query_topics(query)
         if query_topics:
+            merged = inject_topic_summaries(self.store, merged, query_topics, self.lcd_k)
             merged = boost_summaries(merged, query_topics, self.lcd_k)
-        return merged
+        return merged[:self.lcd_k]
 
 
 def get_retriever(

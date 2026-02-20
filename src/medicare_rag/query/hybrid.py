@@ -44,6 +44,7 @@ from medicare_rag.query.retriever import (
     boost_summaries,
     detect_query_topics,
     expand_lcd_query,
+    inject_topic_summaries,
     is_lcd_query,
 )
 
@@ -353,6 +354,7 @@ class HybridRetriever(BaseRetriever):
 
         query_topics = detect_query_topics(query)
         if query_topics:
+            fused = inject_topic_summaries(self.store, fused, query_topics, fetch_k)
             fused = boost_summaries(fused, query_topics, fetch_k)
 
         relevance = detect_source_relevance(query)
