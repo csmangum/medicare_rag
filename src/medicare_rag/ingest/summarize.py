@@ -237,6 +237,19 @@ def generate_all_summaries(
             if summary:
                 summaries.append(summary)
 
+        # Tag document summaries with topics based on their content
+        if summaries:
+            doc_summaries = [
+                s for s in summaries if s.metadata.get("doc_type") == "document_summary"
+            ]
+            if doc_summaries:
+                tagged_doc_summaries = tag_documents_with_topics(doc_summaries)
+                # Replace untagged document summaries with tagged ones
+                summaries = [
+                    s for s in summaries if s.metadata.get("doc_type") != "document_summary"
+                ]
+                summaries.extend(tagged_doc_summaries)
+
     # Topic-cluster summaries
     clusters = cluster_documents(tagged)
     for topic_name, cluster_docs in clusters.items():
