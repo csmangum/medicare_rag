@@ -118,18 +118,22 @@ class BM25Index:
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[Document]:
         """Return the top-*k* BM25-scored documents, optionally filtered."""
-        if self._index is None or not self._documents:
+        with self._lock:
+            index = self._index
+            documents = list(self._documents)
+
+        if index is None or not documents:
             return []
 
         tokens = _tokenize(query)
         if not tokens:
             return []
 
-        scores = self._index.get_scores(tokens)
+        scores = index.get_scores(tokens)
 
         scored: list[tuple[float, int, Document]] = []
         for i, (doc, score) in enumerate(
-            zip(self._documents, scores, strict=False)
+            zip(documents, scores, strict=False)
         ):
             if metadata_filter:
                 if not all(
@@ -238,8 +242,8 @@ def ensure_source_diversity(
             if not displaced and len(top) < k:
                 pass
             elif not displaced:
-                top.pop(-1)
-                popped_src = docs[k - 1].metadata.get("source", "") if k <= len(docs) else ""
+                popped_doc = top.pop(-1)
+                popped_src = popped_doc.metadata.get("source", "")
                 source_counts[popped_src] = max(0, source_counts.get(popped_src, 0) - 1)
 
             top.append(promo)

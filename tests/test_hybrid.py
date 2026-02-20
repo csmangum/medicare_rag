@@ -431,17 +431,11 @@ class TestHybridRetriever:
 class TestGetRetrieverIntegration:
 
     def test_get_retriever_returns_hybrid_when_available(self):
-        mock_hybrid = MagicMock()
-        with patch(
-            "medicare_rag.query.retriever.get_hybrid_retriever",
-            create=True,
-        ) as mock_factory:
-            mock_factory.return_value = mock_hybrid
-            with patch.dict(
-                "sys.modules",
-                {"medicare_rag.query.hybrid": MagicMock(get_hybrid_retriever=mock_factory)},
-            ):
-                from medicare_rag.query.retriever import get_retriever
+        from medicare_rag.query.retriever import get_retriever
 
-                get_retriever(k=10, metadata_filter={"source": "iom"})
+        with patch("medicare_rag.query.hybrid.get_hybrid_retriever") as mock_factory:
+            mock_factory.return_value = MagicMock()
+            retriever = get_retriever(k=10, metadata_filter={"source": "iom"})
+
+        assert retriever is mock_factory.return_value
         mock_factory.assert_called_once_with(k=10, metadata_filter={"source": "iom"})
