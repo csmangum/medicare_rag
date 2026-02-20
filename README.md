@@ -46,7 +46,7 @@ python scripts/download_all.py [--source iom|mcd|codes|all] [--force]
 
 - **Sources:** `iom` (IOM manuals), `mcd` (MCD bulk ZIP), `codes` (HCPCS + optional ICD-10-CM), or `all`.
 - **Idempotent:** Skips when manifest and files exist; use `--force` to re-download.
-- Output: `data/raw/<source>/` plus a `manifest.json` per source (URL, date, file list, optional SHA-256). Set `ICD10_CM_ZIP_URL` in `.env` if you want ICD-10-CM (see [CDC](https://www.cdc.gov/nchs/icd/icd-10-cm.htm)).
+- Output: `data/raw/<source>/` plus a `manifest.json` per source (URL, date, file list, optional SHA-256). Set `ICD10_CM_ZIP_URL` in `.env` if you want ICD-10-CM (see [CDC](https://www.cms.gov/nchs/icd/icd-10-cm.htm)).
 
 ### 2. Ingest (extract → chunk → embed → store)
 

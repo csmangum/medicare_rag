@@ -207,6 +207,61 @@ def test_codes_download_hcpcs_and_manifest(tmp_raw: Path) -> None:
     assert (codes_dir / "manifest.json").exists()
 
 
+def test_codes_download_icd10cm_when_url_set(tmp_raw: Path) -> None:
+    """When ICD10_CM_ZIP_URL is set, download_codes downloads the ICD-10-CM ZIP too."""
+    hcpcs_html = """
+    <html><body>
+    <a href="/files/zip/january-2026-alpha-numeric-hcpcs-file.zip">January 2026 Alpha-Numeric HCPCS File (ZIP)</a>
+    </body></html>
+    """
+    zip_content = _minimal_zip_bytes()
+    icd_url = "https://www.cms.gov/files/zip/2025-code-tables-tabular-and-index.zip"
+
+    def fake_get(url, **kwargs):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        if "quarterly-update" in url:
+            r.text = hcpcs_html
+            return r
+        r.text = ""
+        r.content = b""
+        return r
+
+    def fake_stream(method, url, **kwargs):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        r.iter_bytes = MagicMock(return_value=iter([zip_content]))
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=r)
+        cm.__exit__ = MagicMock(return_value=False)
+        return cm
+
+    with (
+        patch("medicare_rag.download.codes.httpx") as mock_httpx,
+        patch("medicare_rag.download.codes.ICD10_CM_ZIP_URL", icd_url),
+    ):
+        mock_client = MagicMock()
+        mock_client.get.side_effect = fake_get
+        mock_client.stream.side_effect = fake_stream
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_httpx.Client.return_value = mock_client
+
+        download_codes(tmp_raw, force=True)
+
+    codes_dir = tmp_raw / "codes"
+    hcpcs_dir = codes_dir / "hcpcs"
+    icd_dir = codes_dir / "icd10-cm"
+    assert hcpcs_dir.exists()
+    assert icd_dir.exists()
+    icd_zips = list(icd_dir.glob("*.zip"))
+    assert len(icd_zips) >= 1
+    manifest = codes_dir / "manifest.json"
+    assert manifest.exists()
+    manifest_text = manifest.read_text()
+    assert icd_url in manifest_text
+
+
 def test_codes_idempotency_skips_existing_file(tmp_raw: Path) -> None:
     hcpcs_dir = tmp_raw / "codes" / "hcpcs"
     hcpcs_dir.mkdir(parents=True)
@@ -239,7 +294,10 @@ def test_codes_idempotency_skips_existing_file(tmp_raw: Path) -> None:
         cm.__exit__ = MagicMock(return_value=False)
         return cm
 
-    with patch("medicare_rag.download.codes.httpx") as mock_httpx:
+    with (
+        patch("medicare_rag.download.codes.httpx") as mock_httpx,
+        patch("medicare_rag.download.codes.ICD10_CM_ZIP_URL", None),
+    ):
         mock_client = MagicMock()
         mock_client.get.side_effect = track_get
         mock_client.stream.side_effect = track_stream

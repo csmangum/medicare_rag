@@ -1,13 +1,13 @@
 """Code files download: ICD-10-CM and HCPCS."""
 
 import logging
-import os
 from pathlib import Path
 from urllib.parse import urljoin
 
 import httpx
 from bs4 import BeautifulSoup
 
+from medicare_rag.config import ICD10_CM_ZIP_URL
 from medicare_rag.download._manifest import file_sha256, write_manifest
 from medicare_rag.download._utils import (
     DOWNLOAD_TIMEOUT,
@@ -18,8 +18,6 @@ from medicare_rag.download._utils import (
 logger = logging.getLogger(__name__)
 
 HCPCS_QUARTERLY_URL = "https://www.cms.gov/medicare/coding-billing/healthcare-common-procedure-system/quarterly-update"
-# ICD-10-CM: set ICD10_CM_ZIP_URL in env to a CDC ZIP (e.g. from https://www.cdc.gov/nchs/icd/icd-10-cm.htm or FTP)
-ICD10_CM_ZIP_URL_ENV = "ICD10_CM_ZIP_URL"
 
 
 def _latest_hcpcs_zip_url(client: httpx.Client) -> str | None:
@@ -76,8 +74,8 @@ def download_codes(raw_dir: Path, *, force: bool = False) -> None:
             except OSError:
                 files_with_hashes.append((dest, None))
 
-        # ICD-10-CM (optional, from env)
-        icd_url = os.environ.get(ICD10_CM_ZIP_URL_ENV)
+        # ICD-10-CM (optional; set ICD10_CM_ZIP_URL in env/.env to enable)
+        icd_url = ICD10_CM_ZIP_URL
         if icd_url:
             sources_list.append(icd_url)
             icd_dir = out_base / "icd10-cm"
@@ -104,8 +102,7 @@ def download_codes(raw_dir: Path, *, force: bool = False) -> None:
                     files_with_hashes.append((dest, None))
         else:
             logger.info(
-                "ICD-10-CM skipped: set %s to a CDC ZIP URL to download (e.g. from cdc.gov/nchs/icd/icd-10-cm)",
-                ICD10_CM_ZIP_URL_ENV,
+                "ICD-10-CM skipped: set ICD10_CM_ZIP_URL in .env to a CMS/CDC ZIP URL to download",
             )
 
     manifest_path = out_base / "manifest.json"

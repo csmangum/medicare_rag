@@ -78,6 +78,9 @@ EMBEDDING_MODEL = os.environ.get(
 CHROMA_UPSERT_BATCH_SIZE = _safe_positive_int("CHROMA_UPSERT_BATCH_SIZE", 5000)
 GET_META_BATCH_SIZE = _safe_positive_int("GET_META_BATCH_SIZE", 500)
 
+# ICD-10-CM ZIP URL (optional; when set, codes download includes ICD-10-CM)
+ICD10_CM_ZIP_URL: str | None = os.environ.get("ICD10_CM_ZIP_URL") or None
+
 # Download timeout (seconds; must be > 0)
 DOWNLOAD_TIMEOUT = _safe_float_positive("DOWNLOAD_TIMEOUT", 60.0)
 

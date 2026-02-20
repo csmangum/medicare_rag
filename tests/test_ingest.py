@@ -18,8 +18,10 @@ from medicare_rag.ingest.extract import (
     _format_date_yyyymmdd,
     _html_to_text,
     _is_mcd_long_text_key,
+    _looks_like_icd10_code,
     _meta_schema,
     _parse_hcpcs_line,
+    _parse_icd10_xml_root,
     extract_all,
     extract_hcpcs,
     extract_icd10cm,
@@ -448,6 +450,159 @@ def test_chunk_documents_without_meta_json(tmp_path: Path) -> None:
     docs = chunk_documents(tmp_path, source="iom")
     assert len(docs) >= 1
     assert docs[0].metadata.get("doc_id") == "iom_only_txt"
+
+
+# --- ICD-10-CM helpers ---
+
+
+def test_looks_like_icd10_code() -> None:
+    assert _looks_like_icd10_code("A00") is True
+    assert _looks_like_icd10_code("A00.0") is True
+    assert _looks_like_icd10_code("E11.9") is True
+    assert _looks_like_icd10_code("S72.001A") is True
+    assert _looks_like_icd10_code("Z99") is True
+    # Alphanumeric 3rd character (e.g. obstetric codes)
+    assert _looks_like_icd10_code("O9A") is True
+    # X placeholder / letters after the dot
+    assert _looks_like_icd10_code("T36.0X1A") is True
+    assert _looks_like_icd10_code("W19.XXXA") is True
+    assert _looks_like_icd10_code("") is False
+    assert _looks_like_icd10_code("1") is False
+    assert _looks_like_icd10_code("Cholera") is False
+    assert _looks_like_icd10_code("A0") is False
+    # Ranges must NOT match
+    assert _looks_like_icd10_code("A00-B99") is False
+
+
+def test_parse_icd10_xml_root_cdc_tabular() -> None:
+    """CDC tabular XML with <diag> elements containing <name> and <desc>."""
+    import xml.etree.ElementTree as ET
+
+    xml_str = """<?xml version="1.0"?>
+<ICD10CM.tabular>
+  <chapter>
+    <name>1</name>
+    <desc>Certain infectious and parasitic diseases (A00-B99)</desc>
+    <section id="A00-A09">
+      <desc>Intestinal infectious diseases (A00-A09)</desc>
+      <diag>
+        <name>A00</name>
+        <desc>Cholera</desc>
+        <diag>
+          <name>A00.0</name>
+          <desc>Cholera due to Vibrio cholerae 01, biovar cholerae</desc>
+        </diag>
+        <diag>
+          <name>A00.1</name>
+          <desc>Cholera due to Vibrio cholerae 01, biovar eltor</desc>
+        </diag>
+      </diag>
+    </section>
+  </chapter>
+</ICD10CM.tabular>"""
+    root = ET.fromstring(xml_str)
+    pairs = _parse_icd10_xml_root(root)
+    codes = {c for c, _ in pairs}
+    assert "A00" in codes
+    assert "A00.0" in codes
+    assert "A00.1" in codes
+    # Chapter name "1" should NOT be included
+    assert "1" not in codes
+    descs = {c: d for c, d in pairs}
+    assert "Cholera" in descs["A00"]
+    assert "biovar cholerae" in descs["A00.0"]
+
+
+def test_parse_icd10_xml_root_generic_format() -> None:
+    """Fallback generic XML with <code> and <desc> children."""
+    import xml.etree.ElementTree as ET
+
+    xml_str = """<?xml version="1.0"?>
+<root>
+  <row><code>A00.0</code><desc>Cholera</desc></row>
+  <row><code>A00.1</code><description>Cholera eltor</description></row>
+</root>"""
+    root = ET.fromstring(xml_str)
+    pairs = _parse_icd10_xml_root(root)
+    codes = {c for c, _ in pairs}
+    assert "A00.0" in codes
+    assert "A00.1" in codes
+
+
+# --- ICD-10-CM CDC tabular extraction ---
+
+
+@pytest.fixture
+def tmp_icd10cm_cdc_raw(tmp_path: Path) -> Path:
+    """ICD-10-CM ZIP with CDC tabular XML format (diag/name/desc)."""
+    icd_dir = tmp_path / "raw" / "codes" / "icd10-cm"
+    icd_dir.mkdir(parents=True)
+    zip_path = icd_dir / "icd10cm_tabular_2025.zip"
+    xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<ICD10CM.tabular>
+  <chapter>
+    <name>1</name>
+    <desc>Certain infectious and parasitic diseases (A00-B99)</desc>
+    <section id="A00-A09">
+      <desc>Intestinal infectious diseases</desc>
+      <diag>
+        <name>A00</name>
+        <desc>Cholera</desc>
+        <diag>
+          <name>A00.0</name>
+          <desc>Cholera due to Vibrio cholerae 01, biovar cholerae</desc>
+        </diag>
+        <diag>
+          <name>A00.1</name>
+          <desc>Cholera due to Vibrio cholerae 01, biovar eltor</desc>
+        </diag>
+      </diag>
+    </section>
+  </chapter>
+  <chapter>
+    <name>4</name>
+    <desc>Endocrine, nutritional and metabolic diseases (E00-E89)</desc>
+    <section id="E08-E13">
+      <desc>Diabetes mellitus</desc>
+      <diag>
+        <name>E11</name>
+        <desc>Type 2 diabetes mellitus</desc>
+        <diag>
+          <name>E11.9</name>
+          <desc>Type 2 diabetes mellitus without complications</desc>
+        </diag>
+      </diag>
+    </section>
+  </chapter>
+</ICD10CM.tabular>
+"""
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("icd10cm_tabular_2025.xml", xml_content.encode("utf-8"))
+    return tmp_path / "raw"
+
+
+def test_extract_icd10cm_cdc_tabular(tmp_icd10cm_cdc_raw: Path, tmp_path: Path) -> None:
+    """CDC tabular XML with <diag>/<name>/<desc> produces enriched docs."""
+    processed = tmp_path / "processed"
+    written = extract_icd10cm(processed, tmp_icd10cm_cdc_raw, force=True)
+    assert len(written) >= 4  # A00, A00.0, A00.1, E11, E11.9
+    by_code = {}
+    for txt_path, meta_path in written:
+        assert txt_path.exists()
+        assert meta_path.exists()
+        text = txt_path.read_text()
+        meta = json.loads(meta_path.read_text())
+        by_code[meta["icd10_code"]] = (text, meta)
+    assert "A00.0" in by_code
+    assert "E11.9" in by_code
+    # Enrichment from enrich module
+    assert "ICD-10-CM" in by_code["A00.0"][0]
+    assert "Infectious" in by_code["A00.0"][0]
+    assert "ICD-10-CM" in by_code["E11.9"][0]
+    assert "Endocrine" in by_code["E11.9"][0] or "Metabolic" in by_code["E11.9"][0]
+    # Meta checks
+    assert by_code["E11.9"][1]["source"] == "codes"
+    assert by_code["E11.9"][1]["doc_id"] == "icd10cm_E11.9"
 
 
 # --- ICD-10-CM edge cases ---

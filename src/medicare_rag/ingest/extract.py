@@ -534,6 +534,13 @@ def extract_hcpcs(processed_dir: Path, raw_dir: Path, *, force: bool = False) ->
 
 # --- ICD-10-CM (optional XML) ---
 
+_ICD10_CODE_RE = re.compile(r"^[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?$", re.IGNORECASE)
+
+
+def _looks_like_icd10_code(s: str) -> bool:
+    """Return True if *s* looks like an ICD-10-CM code (letter + 2+ alphanumerics, optional dot + 1–4 alphanumerics)."""
+    return bool(_ICD10_CODE_RE.match(s.strip()))
+
 
 def _first_child(elem: Element, *names: str) -> Element | None:
     """First direct child matching any of the given tag names (avoids element truth-value)."""
@@ -544,12 +551,51 @@ def _first_child(elem: Element, *names: str) -> Element | None:
     return None
 
 
+def _parse_icd10_xml_root(root: Element) -> list[tuple[str, str]]:
+    """Return (code, description) pairs from an ICD-10-CM XML tree.
+
+    Supports two layouts:
+      1. CDC tabular format: ``<diag>`` elements with ``<name>`` (code)
+         and ``<desc>`` (description) children.
+      2. Generic format: any element with ``<code>``/``<codeValue>`` and
+         ``<desc>``/``<description>`` children.
+    """
+    pairs: list[tuple[str, str]] = []
+
+    # Strategy 1: CDC tabular (<diag> -> <name> + <desc>)
+    found_diag = False
+    for diag in root.iter("diag"):
+        found_diag = True
+        name_el = _first_child(diag, "name")
+        desc_el = _first_child(diag, "desc")
+        if name_el is None or desc_el is None:
+            continue
+        code_val = (name_el.text or "").strip()
+        desc_val = (desc_el.text or "").strip()
+        if code_val and _looks_like_icd10_code(code_val):
+            pairs.append((code_val, desc_val))
+    if found_diag:
+        return pairs
+
+    # Strategy 2: generic <code>/<codeValue> + <desc>/<description>
+    for elem in root.iter():
+        code_el = _first_child(elem, "code", "codeValue", "code_value")
+        desc_el = _first_child(elem, "desc", "description", "shortDescription")
+        if code_el is not None and desc_el is not None:
+            code_val = (code_el.text or "").strip()
+            desc_val = (desc_el.text or "").strip()
+            if code_val and _looks_like_icd10_code(code_val):
+                pairs.append((code_val, desc_val))
+
+    return pairs
+
+
 def extract_icd10cm(processed_dir: Path, raw_dir: Path, *, force: bool = False) -> list[tuple[Path, Path]]:
     """If ICD-10-CM ZIP exists, extract and parse XML for code-description pairs.
 
-    Uses root.iter() over all elements; any element with direct <code> and <desc> (or
-    codeValue/description/shortDescription) children produces one doc. When multiple
-    elements yield the same code, the same output path is used so the last write wins.
+    Supports CDC tabular XML (``<diag>`` with ``<name>``/``<desc>``) as well as
+    generic XML layouts.  When multiple elements yield the same code the same output
+    path is used so the last write wins.
     """
     icd_dir = raw_dir / "codes" / "icd10-cm"
     if not icd_dir.exists():
@@ -575,36 +621,30 @@ def extract_icd10cm(processed_dir: Path, raw_dir: Path, *, force: bool = False) 
             if root is None:
                 logger.warning("ICD-10-CM %s: failed to parse XML root element", zip_path)
                 continue
-            # Common CDC structure: diag/diagCode or similar
-            for elem in root.iter():
-                code = _first_child(elem, "code", "codeValue", "code_value")
-                desc = _first_child(elem, "desc", "description", "shortDescription")
-                if code is not None and desc is not None and (code.text or "").strip():
-                    code_val = (code.text or "").strip()
-                    desc_val = (desc.text or "").strip()
-                    if not code_val:
-                        continue
-                    doc_id = re.sub(r"[^\w\-.]", "_", code_val)
-                    out_txt = processed_dir / "codes" / "icd10cm" / f"{doc_id}.txt"
-                    out_meta = processed_dir / "codes" / "icd10cm" / f"{doc_id}.meta.json"
-                    if not force and out_txt.exists() and out_meta.exists():
-                        written.append((out_txt, out_meta))
-                        continue
-                    raw_content = f"Code: {code_val}\n\nDescription: {desc_val}"
-                    content = enrich_icd10_text(code_val, raw_content)
-                    meta = _meta_schema(
-                        source="codes",
-                        manual=None,
-                        chapter=None,
-                        title=desc_val[:200] if desc_val else None,
-                        effective_date=None,
-                        source_url=None,
-                        jurisdiction=None,
-                        doc_id=f"icd10cm_{code_val}",
-                        icd10_code=code_val,
-                    )
-                    txt_path, meta_path = _write_doc(processed_dir, "codes/icd10cm", doc_id, content, meta)
-                    written.append((txt_path, meta_path))
+
+            pairs = _parse_icd10_xml_root(root)
+            for code_val, desc_val in pairs:
+                doc_id = re.sub(r"[^\w\-.]", "_", code_val)
+                out_txt = processed_dir / "codes" / "icd10cm" / f"{doc_id}.txt"
+                out_meta = processed_dir / "codes" / "icd10cm" / f"{doc_id}.meta.json"
+                if not force and out_txt.exists() and out_meta.exists():
+                    written.append((out_txt, out_meta))
+                    continue
+                raw_content = f"Code: {code_val}\n\nDescription: {desc_val}"
+                content = enrich_icd10_text(code_val, raw_content)
+                meta = _meta_schema(
+                    source="codes",
+                    manual=None,
+                    chapter=None,
+                    title=desc_val[:200] if desc_val else None,
+                    effective_date=None,
+                    source_url=None,
+                    jurisdiction=None,
+                    doc_id=f"icd10cm_{code_val}",
+                    icd10_code=code_val,
+                )
+                txt_path, meta_path = _write_doc(processed_dir, "codes/icd10cm", doc_id, content, meta)
+                written.append((txt_path, meta_path))
         except (zipfile.BadZipFile, ET.ParseError, OSError, ValueError) as e:
             logger.warning("ICD-10-CM %s: %s", zip_path, e)
     return written
