@@ -416,6 +416,33 @@ class TestEnsureSourceDiversity:
         sources = [d.metadata["source"] for d in result]
         assert sources.count("iom") >= 2
 
+    def test_summary_doc_not_displaced_by_diversity(self):
+        """Topic/document summary at top is not displaced when promoting sources."""
+        summary = Document(
+            page_content="Cardiac Rehabilitation: consolidated summary.",
+            metadata={
+                "doc_id": "topic_cardiac_rehab",
+                "doc_type": "topic_summary",
+                "topic_cluster": "cardiac_rehab",
+            },
+        )
+        docs = [
+            summary,
+            _doc("iom 1", "iom", "d1"),
+            _doc("iom 2", "iom", "d2"),
+            _doc("iom 3", "iom", "d3"),
+            _doc("iom 4", "iom", "d4"),
+            _doc("mcd 1", "mcd", "d5"),
+            _doc("mcd 2", "mcd", "d6"),
+        ]
+        relevance = {"iom": 0.5, "mcd": 0.5, "codes": 0.0}
+        result = ensure_source_diversity(docs, relevance, k=5, min_per_source=2)
+        summary_docs = [
+            d for d in result if d.metadata.get("doc_type") == "topic_summary"
+        ]
+        assert len(summary_docs) == 1, "topic_summary should remain in result"
+        assert result.index(summary_docs[0]) < 3, "summary should remain in top half"
+
 
 # ---------------------------------------------------------------------------
 # HybridRetriever (mocked store and BM25 index)

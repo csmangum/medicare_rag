@@ -413,9 +413,19 @@ def _evaluate_question(
     expected_keywords: list[str] | None,
     expected_sources: list[str] | None,
     k: int,
+    expect_summary_in_results: bool = False,
 ) -> dict:
     """Evaluate a single question's retrieval results. Returns per-question metrics."""
     relevances = _question_relevance(docs, expected_keywords, expected_sources)
+
+    # Summary in results: at least one doc in top-k is a topic_summary or document_summary
+    summary_doc_types = ("topic_summary", "document_summary")
+    summary_in_results = any(
+        d.metadata.get("doc_type") in summary_doc_types for d in docs[:k]
+    )
+    summary_expectation_met = (
+        summary_in_results if expect_summary_in_results else None
+    )
 
     # Hit: at least one relevant doc (>= threshold) in top-k
     first_hit_rank = None
@@ -457,7 +467,7 @@ def _evaluate_question(
     ]
     unique_sources = list(dict.fromkeys(sources_in_results))
 
-    return {
+    out = {
         "hit": hit,
         "first_hit_rank": first_hit_rank,
         "reciprocal_rank": reciprocal_rank,
@@ -468,7 +478,11 @@ def _evaluate_question(
         "partially_relevant": partially_relevant,
         "sources_in_topk": unique_sources,
         "relevances": relevances,
+        "summary_in_results": summary_in_results,
     }
+    if expect_summary_in_results:
+        out["summary_expectation_met"] = summary_expectation_met
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +593,7 @@ def run_eval(
         query = q.get("query", "")
         expected_keywords = q.get("expected_keywords")
         expected_sources = q.get("expected_sources")
+        expect_summary_in_results = q.get("expect_summary_in_results", False)
         category = q.get("category", "uncategorized")
         difficulty = q.get("difficulty", "unknown")
         consistency_group = q.get("consistency_group")
@@ -593,7 +608,13 @@ def run_eval(
 
         # Trim to primary k for scoring
         docs_at_k = docs[:k]
-        eval_result = _evaluate_question(docs_at_k, expected_keywords, expected_sources, k)
+        eval_result = _evaluate_question(
+            docs_at_k,
+            expected_keywords,
+            expected_sources,
+            k,
+            expect_summary_in_results=expect_summary_in_results,
+        )
 
         result_entry = {
             "id": qid,
@@ -639,10 +660,17 @@ def run_eval(
             qid = q.get("id", "?")
             expected_keywords = q.get("expected_keywords")
             expected_sources = q.get("expected_sources")
+            expect_summary_in_results = q.get("expect_summary_in_results", False)
             # Re-use already retrieved docs (we retrieved max(k_values))
             docs = docs_cache[qid]
             docs_kv = docs[:kv]
-            ev = _evaluate_question(docs_kv, expected_keywords, expected_sources, kv)
+            ev = _evaluate_question(
+                docs_kv,
+                expected_keywords,
+                expected_sources,
+                kv,
+                expect_summary_in_results=expect_summary_in_results,
+            )
             if ev["hit"]:
                 kv_hits += 1
             kv_rrs.append(ev["reciprocal_rank"])

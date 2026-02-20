@@ -585,5 +585,36 @@
     "expected_keywords": ["fee schedule", "physician", "payment"],
     "expected_sources": ["iom"],
     "description": "MPFS and relative value unit payment"
+  },
+
+  {
+    "id": "summary_cardiac_rehab",
+    "query": "What are the coverage criteria for cardiac rehabilitation under Medicare?",
+    "category": "summary_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["cardiac", "rehabilitation", "coverage"],
+    "expected_sources": ["iom", "mcd"],
+    "expect_summary_in_results": true,
+    "description": "Expects a topic or document summary in top-k for cardiac rehab"
+  },
+  {
+    "id": "summary_wound_care",
+    "query": "Does Medicare cover wound care and negative pressure wound therapy?",
+    "category": "summary_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["wound", "coverage", "therapy"],
+    "expected_sources": ["iom", "mcd"],
+    "expect_summary_in_results": true,
+    "description": "Expects a topic or document summary in top-k for wound care"
+  },
+  {
+    "id": "summary_hyperbaric_oxygen",
+    "query": "When is hyperbaric oxygen therapy covered by Medicare?",
+    "category": "summary_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["hyperbaric", "oxygen", "coverage"],
+    "expected_sources": ["iom", "mcd"],
+    "expect_summary_in_results": true,
+    "description": "Expects a topic or document summary in top-k for hyperbaric oxygen"
   }
 ]

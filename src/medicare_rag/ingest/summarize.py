@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z])|\n{2,}")
 _WORD_RE = re.compile(r"\w+")
+_MIN_SENTENCE_CHARS = 20
 
 _STOPWORDS = frozenset({
     "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
@@ -44,7 +45,7 @@ def _split_sentences(text: str) -> list[str]:
     sentences: list[str] = []
     for s in raw:
         s = s.strip()
-        if len(s) > 20:
+        if len(s) > _MIN_SENTENCE_CHARS:
             sentences.append(s)
     return sentences
 
@@ -194,6 +195,7 @@ def generate_topic_summary(
             "cluster_size": len(chunks),
             "cluster_total_doc_ids": len(doc_ids_in_cluster),
             "cluster_doc_ids": ",".join(doc_ids_in_cluster[:20]),
+            "cluster_doc_ids_truncated": len(doc_ids_in_cluster) > 20,
         },
     )
 
@@ -216,7 +218,9 @@ def generate_all_summaries(
     doc_texts:
         Optional list of (full_text, metadata) tuples from the extraction
         phase.  When provided, document-level summaries are generated
-        from the full text rather than from chunks.
+        from the full text rather than from chunks.  Should match the
+        same corpus and order as the chunked *documents* (summaries are
+        keyed by doc_id).
 
     Returns
     -------

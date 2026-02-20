@@ -8,12 +8,23 @@ rephrase the same question in different ways.
 Each topic is defined by a set of keyword patterns.  A chunk may belong
 to multiple topics (e.g. "cardiac rehab billing codes" touches both the
 cardiac_rehab and billing topics).
+
+Topic definitions are loaded from DATA_DIR/topic_definitions.json when
+present; otherwise the package default (medicare_rag/data/topic_definitions.json)
+is used.
 """
 
+import json
+import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from langchain_core.documents import Document
+
+from medicare_rag.config import DATA_DIR
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -31,189 +42,50 @@ def _compile(raw: list[str]) -> tuple[re.Pattern[str], ...]:
     return tuple(re.compile(p, re.IGNORECASE) for p in raw)
 
 
-TOPIC_DEFINITIONS: list[TopicDef] = [
-    TopicDef(
-        name="cardiac_rehab",
-        label="Cardiac Rehabilitation",
-        patterns=_compile([
-            r"\bcardiac\s*rehab",
-            r"\bcardiac\s+rehabilitation\b",
-            r"\bheart\s+rehabilitation\b",
-            r"\bcardiovascular\s+rehab",
-            r"\bintensive\s+cardiac\s+rehab",
-            r"\bICR\b",
-            r"\bcardiac\s+recovery\b",
-            r"\bcardiac\s+exercise\b",
-        ]),
-        summary_prefix="Cardiac Rehabilitation: ",
-    ),
-    TopicDef(
-        name="wound_care",
-        label="Wound Care and Management",
-        patterns=_compile([
-            r"\bwound\s*care\b",
-            r"\bwound\s+management\b",
-            r"\bwound\s*vac\b",
-            r"\bnegative\s+pressure\s+wound\b",
-            r"\bNPWT\b",
-            r"\bdebridement\b",
-            r"\bpressure\s+ulcer\b",
-            r"\bdecubitus\b",
-            r"\bchronic\s+wound\b",
-            r"\bskin\s+graft\b",
-            r"\bwound\s+healing\b",
-        ]),
-        summary_prefix="Wound Care: ",
-    ),
-    TopicDef(
-        name="hyperbaric_oxygen",
-        label="Hyperbaric Oxygen Therapy",
-        patterns=_compile([
-            r"\bhyperbaric\s+oxygen\b",
-            r"\bHBOT\b",
-            r"\bhyperbaric\s+therapy\b",
-            r"\bhyperbaric\s+chamber\b",
-            r"\btopical\s+oxygen\b",
-        ]),
-        summary_prefix="Hyperbaric Oxygen Therapy: ",
-    ),
-    TopicDef(
-        name="dme",
-        label="Durable Medical Equipment",
-        patterns=_compile([
-            r"\bdurable\s+medical\s+equipment\b",
-            r"\bDME\b",
-            r"\bwheelchair\b",
-            r"\bhospital\s+bed\b",
-            r"\boxygen\s+equipment\b",
-            r"\bCPAP\b",
-            r"\bBiPAP\b",
-            r"\bnebulizer\b",
-            r"\bwalker\b",
-        ]),
-        summary_prefix="Durable Medical Equipment: ",
-    ),
-    TopicDef(
-        name="physical_therapy",
-        label="Physical Therapy and Rehabilitation",
-        patterns=_compile([
-            r"\bphysical\s+therapy\b",
-            r"\boutpatient\s+rehabilitation\b",
-            r"\bPT\s+services?\b",
-            r"\bphysical\s+therapist\b",
-            r"\brehabilitation\s+services?\b",
-            r"\boccupational\s+therapy\b",
-            r"\bOT\s+services?\b",
-        ]),
-        summary_prefix="Physical Therapy: ",
-    ),
-    TopicDef(
-        name="imaging",
-        label="Diagnostic Imaging",
-        patterns=_compile([
-            r"\bdiagnostic\s+imaging\b",
-            r"\bMRI\b",
-            r"\bCT\s+scan\b",
-            r"\bX[- ]?ray\b",
-            r"\bultrasound\b",
-            r"\bPET\s+scan\b",
-            r"\bmammograph",
-            r"\badvanced\s+imaging\b",
-            r"\bradiology\b",
-        ]),
-        summary_prefix="Diagnostic Imaging: ",
-    ),
-    TopicDef(
-        name="home_health",
-        label="Home Health Services",
-        patterns=_compile([
-            r"\bhome\s+health\b",
-            r"\bHHA\b",
-            r"\bhome\s+health\s+agency\b",
-            r"\bskilled\s+nursing\b",
-            r"\bhomebound\b",
-            r"\bhome\s+care\b",
-        ]),
-        summary_prefix="Home Health: ",
-    ),
-    TopicDef(
-        name="hospice",
-        label="Hospice and Palliative Care",
-        patterns=_compile([
-            r"\bhospice\b",
-            r"\bpalliative\s+care\b",
-            r"\bend[- ]of[- ]life\b",
-            r"\bterminal\s+(?:illness|care|prognosis)\b",
-        ]),
-        summary_prefix="Hospice Care: ",
-    ),
-    TopicDef(
-        name="dialysis",
-        label="Dialysis and ESRD",
-        patterns=_compile([
-            r"\bdialysis\b",
-            r"\bESRD\b",
-            r"\bend[- ]stage\s+renal\b",
-            r"\bhemodialysis\b",
-            r"\bperitoneal\s+dialysis\b",
-            r"\bkidney\s+disease\b",
-        ]),
-        summary_prefix="Dialysis/ESRD: ",
-    ),
-    TopicDef(
-        name="chemotherapy",
-        label="Chemotherapy and Oncology",
-        patterns=_compile([
-            r"\bchemotherapy\b",
-            r"\boncology\b",
-            r"\bantineoplastic\b",
-            r"\bcancer\s+treatment\b",
-            r"\bimmunotherapy\b",
-            r"\bradiation\s+therapy\b",
-        ]),
-        summary_prefix="Chemotherapy/Oncology: ",
-    ),
-    TopicDef(
-        name="mental_health",
-        label="Mental and Behavioral Health",
-        patterns=_compile([
-            r"\bmental\s+health\b",
-            r"\bbehavioral\s+health\b",
-            r"\bpsychiatr",
-            r"\bpsycholog",
-            r"\bsubstance\s+(?:abuse|use)\b",
-            r"\bdepression\b",
-            r"\banxiety\b",
-        ]),
-        summary_prefix="Mental Health: ",
-    ),
-    TopicDef(
-        name="ambulance",
-        label="Ambulance and Transport Services",
-        patterns=_compile([
-            r"\bambulance\b",
-            r"\bemergency\s+(?:medical\s+)?transport\b",
-            r"\bnon[- ]emergency\s+transport\b",
-            r"\bBLS\s+(?:transport|ambulance|unit|crew|level)\b",
-            r"\bALS\s+(?:transport|ambulance|unit|crew|level|intercept)\b",
-            r"\bparamedic\b",
-        ]),
-        summary_prefix="Ambulance Services: ",
-    ),
-    TopicDef(
-        name="infusion_therapy",
-        label="Infusion Therapy",
-        patterns=_compile([
-            r"\binfusion\s+therapy\b",
-            r"\bIV\s+(?:infusion|therapy|drug)\b",
-            r"\binjectable\s+drug\b",
-            r"\bdrug\s+administration\b",
-            r"\binfusion\s+pump\b",
-        ]),
-        summary_prefix="Infusion Therapy: ",
-    ),
-]
+def _load_topic_definitions() -> list[TopicDef]:
+    """Load topic definitions from DATA_DIR/topic_definitions.json or package default."""
+    path = DATA_DIR / "topic_definitions.json"
+    if path.exists():
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError as e:
+            logger.warning("Could not read %s: %s; using package default", path, e)
+            raw = None
+    else:
+        raw = None
 
+    if raw is None:
+        from importlib.resources import files
+
+        pkg_path = files("medicare_rag") / "data" / "topic_definitions.json"
+        try:
+            raw = pkg_path.read_text(encoding="utf-8")
+        except Exception as e:
+            raise FileNotFoundError(
+                f"Topic definitions not found at {path} or package default: {e}"
+            ) from e
+
+    data = json.loads(raw)
+    out: list[TopicDef] = []
+    for item in data:
+        name = item.get("name", "")
+        label = item.get("label", name)
+        patterns_raw = item.get("patterns") or []
+        summary_prefix = item.get("summary_prefix", "")
+        min_pattern_matches = max(1, int(item.get("min_pattern_matches", 1)))
+        out.append(
+            TopicDef(
+                name=name,
+                label=label,
+                patterns=_compile(patterns_raw),
+                summary_prefix=summary_prefix,
+                min_pattern_matches=min_pattern_matches,
+            )
+        )
+    return out
+
+
+TOPIC_DEFINITIONS: list[TopicDef] = _load_topic_definitions()
 _TOPIC_DEF_MAP: dict[str, TopicDef] = {td.name: td for td in TOPIC_DEFINITIONS}
 
 

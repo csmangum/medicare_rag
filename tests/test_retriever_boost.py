@@ -192,6 +192,18 @@ class TestInjectTopicSummaries:
         out = inject_topic_summaries(mock_store, docs, [], max_k=10)
         assert out == docs
 
+    def test_no_topic_docs_in_store_returns_docs_unchanged(self):
+        """When Chroma returns no documents for requested topic ids, prepend nothing."""
+        mock_store = MagicMock()
+        mock_coll = MagicMock()
+        mock_coll.get.return_value = {"ids": [], "documents": [], "metadatas": []}
+        mock_store._collection = mock_coll
+
+        docs = [_doc("cardiac rehab content", doc_id="d1")]
+        out = inject_topic_summaries(mock_store, docs, ["cardiac_rehab"], max_k=10)
+        assert len(out) == 1
+        assert out[0].metadata["doc_id"] == "d1"
+
     def test_respects_max_k(self):
         mock_store = MagicMock()
         mock_coll = MagicMock()

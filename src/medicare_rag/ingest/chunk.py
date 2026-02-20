@@ -123,6 +123,7 @@ def chunk_documents(
                 documents.append(Document(page_content=chunk, metadata=chunk_meta))
 
     if enable_summaries:
+        # Lazy import to avoid pulling summarize/cluster when summaries disabled.
         from medicare_rag.ingest.summarize import generate_all_summaries
 
         tagged, summaries = generate_all_summaries(
