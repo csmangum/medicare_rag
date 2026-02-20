@@ -118,6 +118,16 @@ else:
 # LCD retrieval: higher k for coverage-determination queries
 LCD_RETRIEVAL_K = _safe_positive_int("LCD_RETRIEVAL_K", 12)
 
+# Topic clustering and summarization
+ENABLE_TOPIC_SUMMARIES = os.environ.get("ENABLE_TOPIC_SUMMARIES", "1").strip().lower() in (
+    "1", "true", "yes",
+)
+MAX_DOC_SUMMARY_SENTENCES = _safe_positive_int("MAX_DOC_SUMMARY_SENTENCES", 8)
+MAX_TOPIC_SUMMARY_SENTENCES = _safe_positive_int("MAX_TOPIC_SUMMARY_SENTENCES", 10)
+MIN_TOPIC_CLUSTER_CHUNKS = _safe_positive_int("MIN_TOPIC_CLUSTER_CHUNKS", 2)
+MIN_DOC_TEXT_LENGTH_FOR_SUMMARY = _safe_positive_int("MIN_DOC_TEXT_LENGTH_FOR_SUMMARY", 200)
+SUMMARY_BOOST_WEIGHT = _safe_float_positive("SUMMARY_BOOST_WEIGHT", 1.3)
+
 # Hybrid retrieval: combine semantic and keyword (BM25) search
 HYBRID_SEMANTIC_WEIGHT = _safe_float_positive("HYBRID_SEMANTIC_WEIGHT", 0.6)
 HYBRID_KEYWORD_WEIGHT = _safe_float_positive("HYBRID_KEYWORD_WEIGHT", 0.4)
