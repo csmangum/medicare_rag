@@ -534,11 +534,11 @@ def extract_hcpcs(processed_dir: Path, raw_dir: Path, *, force: bool = False) ->
 
 # --- ICD-10-CM (optional XML) ---
 
-_ICD10_CODE_RE = re.compile(r"^[A-Z]\d{2}(?:\.\d{1,4})?[A-Z]?$", re.IGNORECASE)
+_ICD10_CODE_RE = re.compile(r"^[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?$", re.IGNORECASE)
 
 
 def _looks_like_icd10_code(s: str) -> bool:
-    """Return True if *s* looks like an ICD-10-CM code (letter + 2+ digits, optional dot/suffix)."""
+    """Return True if *s* looks like an ICD-10-CM code (letter + 2+ alphanumerics, optional dot + 1–4 alphanumerics)."""
     return bool(_ICD10_CODE_RE.match(s.strip()))
 
 
@@ -563,19 +563,19 @@ def _parse_icd10_xml_root(root: Element) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
 
     # Strategy 1: CDC tabular (<diag> -> <name> + <desc>)
-    diag_elements = list(root.iter("diag"))
-    if diag_elements:
-        for diag in diag_elements:
-            name_el = _first_child(diag, "name")
-            desc_el = _first_child(diag, "desc")
-            if name_el is None or desc_el is None:
-                continue
-            code_val = (name_el.text or "").strip()
-            desc_val = (desc_el.text or "").strip()
-            if code_val and _looks_like_icd10_code(code_val):
-                pairs.append((code_val, desc_val))
-        if pairs:
-            return pairs
+    found_diag = False
+    for diag in root.iter("diag"):
+        found_diag = True
+        name_el = _first_child(diag, "name")
+        desc_el = _first_child(diag, "desc")
+        if name_el is None or desc_el is None:
+            continue
+        code_val = (name_el.text or "").strip()
+        desc_val = (desc_el.text or "").strip()
+        if code_val and _looks_like_icd10_code(code_val):
+            pairs.append((code_val, desc_val))
+    if found_diag:
+        return pairs
 
     # Strategy 2: generic <code>/<codeValue> + <desc>/<description>
     for elem in root.iter():
@@ -584,7 +584,7 @@ def _parse_icd10_xml_root(root: Element) -> list[tuple[str, str]]:
         if code_el is not None and desc_el is not None:
             code_val = (code_el.text or "").strip()
             desc_val = (desc_el.text or "").strip()
-            if code_val:
+            if code_val and _looks_like_icd10_code(code_val):
                 pairs.append((code_val, desc_val))
 
     return pairs

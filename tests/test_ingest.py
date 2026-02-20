@@ -461,10 +461,17 @@ def test_looks_like_icd10_code() -> None:
     assert _looks_like_icd10_code("E11.9") is True
     assert _looks_like_icd10_code("S72.001A") is True
     assert _looks_like_icd10_code("Z99") is True
+    # Alphanumeric 3rd character (e.g. obstetric codes)
+    assert _looks_like_icd10_code("O9A") is True
+    # X placeholder / letters after the dot
+    assert _looks_like_icd10_code("T36.0X1A") is True
+    assert _looks_like_icd10_code("W19.XXXA") is True
     assert _looks_like_icd10_code("") is False
     assert _looks_like_icd10_code("1") is False
     assert _looks_like_icd10_code("Cholera") is False
     assert _looks_like_icd10_code("A0") is False
+    # Ranges must NOT match
+    assert _looks_like_icd10_code("A00-B99") is False
 
 
 def test_parse_icd10_xml_root_cdc_tabular() -> None:
