@@ -513,6 +513,27 @@ class TestHybridRetriever:
             if filt is not None:
                 assert filt.get("source") != "mcd"
 
+    def test_topic_query_boosts_summary_doc_in_results(self):
+        """When query matches a topic, summary docs are boosted and appear in results."""
+        regular = _doc("Cardiac rehab coverage criteria", "iom", "d1")
+        summary = Document(
+            page_content="Cardiac Rehabilitation: consolidated summary.",
+            metadata={
+                "doc_id": "topic_cardiac_rehab",
+                "chunk_index": 0,
+                "source": "iom",
+                "doc_type": "topic_summary",
+                "topic_cluster": "cardiac_rehab",
+            },
+        )
+        store = self._make_mock_store(docs=[regular, summary])
+        retriever = HybridRetriever(store=store, k=5)
+        with patch("medicare_rag.query.hybrid._bm25_index", new=BM25Index()):
+            results = retriever.invoke("cardiac rehab coverage")
+        assert any(
+            d.metadata.get("doc_type") == "topic_summary" for d in results
+        ), "topic_summary doc should appear when query matches topic"
+
 
 # ---------------------------------------------------------------------------
 # Integration: get_retriever returns HybridRetriever when rank-bm25 available

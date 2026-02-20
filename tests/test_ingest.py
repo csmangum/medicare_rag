@@ -405,7 +405,11 @@ def test_chunk_documents_attaches_metadata(tmp_path: Path) -> None:
     )
     docs = chunk_documents(tmp_path, source="iom", chunk_size=100, chunk_overlap=20)
     assert len(docs) >= 2
-    for d in docs:
+    regular_docs = [d for d in docs if d.metadata.get("doc_type") not in (
+        "document_summary", "topic_summary",
+    )]
+    assert len(regular_docs) >= 2
+    for d in regular_docs:
         assert d.metadata.get("source") == "iom"
         assert "chunk_index" in d.metadata
         assert "total_chunks" in d.metadata
@@ -663,8 +667,14 @@ def test_chunk_documents_mcd_uses_lcd_chunk_size(tmp_path: Path) -> None:
     large_chunks = chunk_documents(
         tmp_path, source="mcd", lcd_chunk_size=1500, lcd_chunk_overlap=300
     )
-    assert len(small_chunks) > len(large_chunks)
-    for d in large_chunks:
+    small_regular = [d for d in small_chunks if d.metadata.get("doc_type") not in (
+        "document_summary", "topic_summary",
+    )]
+    large_regular = [d for d in large_chunks if d.metadata.get("doc_type") not in (
+        "document_summary", "topic_summary",
+    )]
+    assert len(small_regular) > len(large_regular)
+    for d in large_regular:
         assert d.metadata.get("source") == "mcd"
         assert "chunk_index" in d.metadata
 

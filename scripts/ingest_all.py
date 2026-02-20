@@ -43,6 +43,11 @@ def main() -> int:
         action="store_true",
         help="Skip embed and vector store; only run extract and chunk",
     )
+    parser.add_argument(
+        "--no-summaries",
+        action="store_true",
+        help="Disable topic clustering and summary generation",
+    )
     args = parser.parse_args()
 
     processed_dir = PROCESSED_DIR
@@ -56,7 +61,11 @@ def main() -> int:
         else:
             logger.info("Skipping extraction (--skip-extract)")
 
-        docs = chunk_documents(processed_dir, source=args.source)
+        docs = chunk_documents(
+            processed_dir,
+            source=args.source,
+            enable_summaries=not args.no_summaries,
+        )
         logger.info("Chunking: %d chunks produced", len(docs))
         print(f"Documents (chunks): {len(docs)}")
 

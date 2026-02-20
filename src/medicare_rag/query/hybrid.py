@@ -41,7 +41,10 @@ from medicare_rag.config import (
 from medicare_rag.index.store import get_raw_collection
 from medicare_rag.query.expand import detect_source_relevance, expand_cross_source_query
 from medicare_rag.query.retriever import (
+    boost_summaries,
+    detect_query_topics,
     expand_lcd_query,
+    inject_topic_summaries,
     is_lcd_query,
 )
 
@@ -349,9 +352,13 @@ class HybridRetriever(BaseRetriever):
 
         fused = reciprocal_rank_fusion(all_lists, weights=weights, max_results=fetch_k)
 
+        query_topics = detect_query_topics(query)
+        if query_topics:
+            fused = inject_topic_summaries(self.store, fused, query_topics, fetch_k)
+            fused = boost_summaries(fused, query_topics, fetch_k)
+
         relevance = detect_source_relevance(query)
         diversified = ensure_source_diversity(fused, relevance, effective_k)
-
         return diversified
 
 
