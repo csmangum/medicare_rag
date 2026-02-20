@@ -416,6 +416,59 @@ class TestEnsureSourceDiversity:
         sources = [d.metadata["source"] for d in result]
         assert sources.count("iom") >= 2
 
+    def test_summary_doc_not_displaced_by_diversity(self):
+        """Topic/document summary at top is not displaced when promoting sources."""
+        summary = Document(
+            page_content="Cardiac Rehabilitation: consolidated summary.",
+            metadata={
+                "doc_id": "topic_cardiac_rehab",
+                "doc_type": "topic_summary",
+                "topic_cluster": "cardiac_rehab",
+            },
+        )
+        docs = [
+            summary,
+            _doc("iom 1", "iom", "d1"),
+            _doc("iom 2", "iom", "d2"),
+            _doc("iom 3", "iom", "d3"),
+            _doc("iom 4", "iom", "d4"),
+            _doc("mcd 1", "mcd", "d5"),
+            _doc("mcd 2", "mcd", "d6"),
+        ]
+        relevance = {"iom": 0.5, "mcd": 0.5, "codes": 0.0}
+        result = ensure_source_diversity(docs, relevance, k=5, min_per_source=2)
+        summary_docs = [
+            d for d in result if d.metadata.get("doc_type") == "topic_summary"
+        ]
+        assert len(summary_docs) == 1, "topic_summary should remain in result"
+        assert result.index(summary_docs[0]) < 3, "summary should remain in top half"
+
+    def test_promo_added_when_last_position_is_summary(self):
+        """When the last slot is a summary (cannot be displaced), deficit is still
+        filled by displacing the lowest-ranked non-summary doc."""
+        summary = Document(
+            page_content="Codes summary.",
+            metadata={
+                "doc_id": "topic_codes",
+                "doc_type": "topic_summary",
+                "source": "codes",
+            },
+        )
+        docs = [
+            _doc("iom 1", "iom", "d1"),
+            _doc("iom 2", "iom", "d2"),
+            _doc("mcd 1", "mcd", "d3"),
+            _doc("mcd 2", "mcd", "d4"),
+            summary,
+            _doc("codes 1", "codes", "d5"),
+        ]
+        relevance = {"iom": 0.5, "mcd": 0.5, "codes": 0.5}
+        result = ensure_source_diversity(docs, relevance, k=5, min_per_source=2)
+        sources = [d.metadata["source"] for d in result]
+        assert sources.count("codes") >= 2, "deficit for codes should be filled"
+        summary_in = [d for d in result if d.metadata.get("doc_type") == "topic_summary"]
+        assert len(summary_in) == 1, "summary should remain (not displaced)"
+
 
 # ---------------------------------------------------------------------------
 # HybridRetriever (mocked store and BM25 index)
@@ -512,6 +565,27 @@ class TestHybridRetriever:
             filt = call.kwargs.get("filter")
             if filt is not None:
                 assert filt.get("source") != "mcd"
+
+    def test_topic_query_boosts_summary_doc_in_results(self):
+        """When query matches a topic, summary docs are boosted and appear in results."""
+        regular = _doc("Cardiac rehab coverage criteria", "iom", "d1")
+        summary = Document(
+            page_content="Cardiac Rehabilitation: consolidated summary.",
+            metadata={
+                "doc_id": "topic_cardiac_rehab",
+                "chunk_index": 0,
+                "source": "iom",
+                "doc_type": "topic_summary",
+                "topic_cluster": "cardiac_rehab",
+            },
+        )
+        store = self._make_mock_store(docs=[regular, summary])
+        retriever = HybridRetriever(store=store, k=5)
+        with patch("medicare_rag.query.hybrid._bm25_index", new=BM25Index()):
+            results = retriever.invoke("cardiac rehab coverage")
+        assert any(
+            d.metadata.get("doc_type") == "topic_summary" for d in results
+        ), "topic_summary doc should appear when query matches topic"
 
 
 # ---------------------------------------------------------------------------

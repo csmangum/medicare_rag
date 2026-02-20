@@ -41,6 +41,7 @@ from medicare_rag.config import (
 from medicare_rag.index.store import get_raw_collection
 from medicare_rag.query.expand import detect_source_relevance, expand_cross_source_query
 from medicare_rag.query.retriever import (
+    apply_topic_summary_boost,
     expand_lcd_query,
     is_lcd_query,
 )
@@ -214,11 +215,14 @@ def ensure_source_diversity(
 
     Documents from under-represented sources are promoted from lower
     positions, displacing the lowest-ranked documents from
-    over-represented sources.
+    over-represented sources. Summary documents (doc_type
+    topic_summary or document_summary) are never displaced to satisfy
+    source diversity.
     """
     if not docs or not relevant_sources:
         return docs[:k]
 
+    _SUMMARY_DOC_TYPES = ("topic_summary", "document_summary")
     target_sources = {s for s, score in relevant_sources.items() if score > 0.2}
     if len(target_sources) <= 1:
         return docs[:k]
@@ -247,23 +251,31 @@ def ensure_source_diversity(
 
         for promo in promotions:
             displaced = False
+            # Prefer displacing an over-represented non-summary doc (scan low rank first)
             for i in range(len(top) - 1, -1, -1):
                 src_i = top[i].metadata.get("source", "")
-                if source_counts.get(src_i, 0) > min_per_source:
+                if source_counts.get(src_i, 0) > min_per_source and top[
+                    i
+                ].metadata.get("doc_type") not in _SUMMARY_DOC_TYPES:
                     source_counts[src_i] -= 1
                     top.pop(i)
                     displaced = True
                     break
-            if not displaced:
-                if len(top) >= k:
-                    popped_doc = top.pop(-1)
-                    popped_src = popped_doc.metadata.get("source", "")
-                    source_counts[popped_src] = max(
-                        0, source_counts.get(popped_src, 0) - 1
-                    )
-
-            top.append(promo)
-            source_counts[src] = source_counts.get(src, 0) + 1
+            # If no over-represented non-summary: make room by displacing the
+            # lowest-ranked non-summary so deficit positions are still filled.
+            if not displaced and len(top) >= k:
+                for i in range(len(top) - 1, -1, -1):
+                    if top[i].metadata.get("doc_type") not in _SUMMARY_DOC_TYPES:
+                        popped_doc = top.pop(i)
+                        popped_src = popped_doc.metadata.get("source", "")
+                        source_counts[popped_src] = max(
+                            0, source_counts.get(popped_src, 0) - 1
+                        )
+                        displaced = True
+                        break
+            if displaced:
+                top.append(promo)
+                source_counts[src] = source_counts.get(src, 0) + 1
 
     return top[:k]
 
@@ -348,6 +360,8 @@ class HybridRetriever(BaseRetriever):
         weights = [self.semantic_weight] * n_semantic + [self.keyword_weight] * len(keyword_lists)
 
         fused = reciprocal_rank_fusion(all_lists, weights=weights, max_results=fetch_k)
+
+        fused = apply_topic_summary_boost(self.store, fused, query, fetch_k)
 
         relevance = detect_source_relevance(query)
         diversified = ensure_source_diversity(fused, relevance, effective_k)

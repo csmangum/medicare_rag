@@ -79,6 +79,15 @@ def test_chunk_id_without_chunk_index() -> None:
     assert _chunk_id(doc) == "codes_A1001"
 
 
+def test_chunk_id_document_summary_uses_doc_id() -> None:
+    """Document summaries have no chunk_index; store id is doc_id (e.g. summary_xyz)."""
+    doc = Document(
+        page_content="Summary of document.",
+        metadata={"doc_id": "summary_xyz", "doc_type": "document_summary"},
+    )
+    assert _chunk_id(doc) == "summary_xyz"
+
+
 def test_content_hash_deterministic() -> None:
     doc = Document(page_content="hello", metadata={"doc_id": "d1", "chunk_index": 0})
     assert _content_hash(doc) == _content_hash(doc)

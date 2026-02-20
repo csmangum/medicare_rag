@@ -1,6 +1,8 @@
 """Chunking with RecursiveCharacterTextSplitter (Phase 2).
 
 Loads extracted .txt + .meta.json from processed_dir and returns LangChain Documents.
+Optionally generates document-level and topic-cluster summaries for
+fragmented content to improve retrieval consistency across rephrasings.
 """
 
 import json
@@ -10,7 +12,17 @@ from pathlib import Path
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from medicare_rag.config import CHUNK_OVERLAP, CHUNK_SIZE, LCD_CHUNK_OVERLAP, LCD_CHUNK_SIZE
+from medicare_rag.config import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    ENABLE_TOPIC_SUMMARIES,
+    LCD_CHUNK_OVERLAP,
+    LCD_CHUNK_SIZE,
+    MAX_DOC_SUMMARY_SENTENCES,
+    MAX_TOPIC_SUMMARY_SENTENCES,
+    MIN_DOC_TEXT_LENGTH_FOR_SUMMARY,
+    MIN_TOPIC_CLUSTER_CHUNKS,
+)
 from medicare_rag.ingest import SourceKind
 
 logger = logging.getLogger(__name__)
@@ -69,6 +81,7 @@ def chunk_documents(
     chunk_overlap: int = CHUNK_OVERLAP,
     lcd_chunk_size: int = LCD_CHUNK_SIZE,
     lcd_chunk_overlap: int = LCD_CHUNK_OVERLAP,
+    enable_summaries: bool = ENABLE_TOPIC_SUMMARIES,
 ) -> list[Document]:
     """Load extracted docs from processed_dir and return chunked LangChain Documents.
 
@@ -76,6 +89,10 @@ def chunk_documents(
     MCD/LCD documents use larger chunks (lcd_chunk_size / lcd_chunk_overlap) to
     preserve more policy-text context per chunk, improving LCD retrieval.
     Code docs (HCPCS, ICD-10) are kept as one chunk per document (logical grouping).
+
+    When *enable_summaries* is True, document-level and topic-cluster
+    summary documents are appended.  These act as stable "anchor" chunks
+    that improve retrieval consistency for fragmented topics.
     """
     processed_dir = Path(processed_dir)
     pairs = _load_extracted_docs(processed_dir, source)
@@ -104,4 +121,24 @@ def chunk_documents(
                 chunk_meta["chunk_index"] = i
                 chunk_meta["total_chunks"] = len(chunks)
                 documents.append(Document(page_content=chunk, metadata=chunk_meta))
+
+    if enable_summaries:
+        # Lazy import to avoid pulling summarize/cluster when summaries disabled.
+        from medicare_rag.ingest.summarize import generate_all_summaries
+
+        tagged, summaries = generate_all_summaries(
+            documents,
+            doc_texts=pairs,
+            max_doc_summary_sentences=MAX_DOC_SUMMARY_SENTENCES,
+            max_topic_summary_sentences=MAX_TOPIC_SUMMARY_SENTENCES,
+            min_topic_chunks=MIN_TOPIC_CLUSTER_CHUNKS,
+            min_doc_text_length=MIN_DOC_TEXT_LENGTH_FOR_SUMMARY,
+        )
+        documents = tagged + summaries
+        logger.info(
+            "Topic tagging and summarization: %d tagged chunks + %d summaries",
+            len(tagged),
+            len(summaries),
+        )
+
     return documents
