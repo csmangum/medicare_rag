@@ -184,7 +184,10 @@ class LCDAwareRetriever(BaseRetriever):
     def _lcd_retrieve(self, query: str) -> list[Document]:
         # If metadata_filter explicitly specifies a non-MCD source, skip LCD-aware
         # retrieval to honor the user's source filter
-        if self.metadata_filter is not None and self.metadata_filter.get("source") not in (None, "mcd"):
+        if (
+            self.metadata_filter is not None
+            and self.metadata_filter.get("source") not in (None, "mcd")
+        ):
             search_kwargs = {"k": self.k, "filter": self.metadata_filter}
             return self.store.similarity_search(query, **search_kwargs)
 
@@ -220,12 +223,24 @@ def get_retriever(
     k: int = 8,
     metadata_filter: dict | None = None,
 ) -> BaseRetriever:
-    """Return an LCD-aware retriever over the Chroma store.
+    """Return a hybrid retriever combining semantic and keyword search.
+
+    The hybrid retriever handles LCD-aware expansion, cross-source query
+    expansion, BM25 keyword search, and source diversification.  Falls
+    back to the simpler :class:`LCDAwareRetriever` when the ``rank-bm25``
+    dependency is unavailable.
 
     Uses the same embeddings and persist directory as the index. Optional
     metadata_filter is passed to Chroma's where clause (e.g. {"source": "iom"},
     {"manual": "100-02"}, {"jurisdiction": "JL"}).
     """
+    try:
+        from medicare_rag.query.hybrid import get_hybrid_retriever
+
+        return get_hybrid_retriever(k=k, metadata_filter=metadata_filter)
+    except ImportError:
+        pass
+
     embeddings = get_embeddings()
     store = get_or_create_chroma(embeddings)
     return LCDAwareRetriever(

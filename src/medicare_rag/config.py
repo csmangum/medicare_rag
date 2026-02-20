@@ -118,6 +118,14 @@ else:
 # LCD retrieval: higher k for coverage-determination queries
 LCD_RETRIEVAL_K = _safe_positive_int("LCD_RETRIEVAL_K", 12)
 
+# Hybrid retrieval: combine semantic and keyword (BM25) search
+HYBRID_SEMANTIC_WEIGHT = _safe_float_positive("HYBRID_SEMANTIC_WEIGHT", 0.6)
+HYBRID_KEYWORD_WEIGHT = _safe_float_positive("HYBRID_KEYWORD_WEIGHT", 0.4)
+RRF_K = _safe_positive_int("RRF_K", 60)
+
+# Cross-source retrieval: ensure results span multiple source types
+CROSS_SOURCE_MIN_PER_SOURCE = _safe_positive_int("CROSS_SOURCE_MIN_PER_SOURCE", 2)
+
 # Phase 4: local LLM (Hugging Face pipeline, runs with sentence-transformers stack)
 LOCAL_LLM_MODEL = os.environ.get(
     "LOCAL_LLM_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
