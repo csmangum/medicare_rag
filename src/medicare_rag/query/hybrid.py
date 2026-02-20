@@ -139,10 +139,7 @@ class BM25Index:
         scores = index.get_scores(tokens)
 
         scored: list[tuple[float, int, Document]] = []
-        for i, (doc, score) in enumerate(
-            zip(documents, scores, strict=False)
-        ):
-        for i, (doc, score) in enumerate(zip(self._documents, scores, strict=False)):
+        for i, (doc, score) in enumerate(zip(documents, scores, strict=False)):
             if metadata_filter:
                 if not all(doc.metadata.get(k_) == v for k_, v in metadata_filter.items()):
                     continue
@@ -345,6 +342,8 @@ def get_hybrid_retriever(
     metadata_filter: dict | None = None,
 ) -> HybridRetriever:
     """Convenience constructor that wires up embeddings and Chroma store."""
+    if not _HAS_BM25:
+        raise ImportError("rank-bm25 is required for hybrid retrieval")
     from medicare_rag.index import get_embeddings, get_or_create_chroma
 
     embeddings = get_embeddings()
