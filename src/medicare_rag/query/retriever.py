@@ -3,6 +3,10 @@
 Provides a retriever that detects LCD/coverage-determination queries and
 applies query expansion plus source-filtered multi-query retrieval to
 improve hit rates on MCD policy content.
+
+Summary documents (``doc_type`` = ``document_summary`` or ``topic_summary``)
+are boosted in retrieval results to provide stable "anchor" chunks that
+match consistently regardless of query phrasing.
 """
 import re
 from typing import Any
@@ -120,6 +124,57 @@ def expand_lcd_query(query: str) -> list[str]:
     return queries
 
 
+def detect_query_topics(query: str) -> list[str]:
+    """Return the list of topic cluster names relevant to the query."""
+    from medicare_rag.ingest.cluster import TOPIC_DEFINITIONS
+
+    topics: list[str] = []
+    for td in TOPIC_DEFINITIONS:
+        if any(p.search(query) for p in td.patterns):
+            topics.append(td.name)
+    return topics
+
+
+def _boost_summaries(
+    docs: list[Document],
+    query_topics: list[str],
+    max_k: int,
+) -> list[Document]:
+    """Re-rank *docs* so that topic/document summaries matching the query
+    topics appear near the top of the result list.
+
+    Summary documents act as stable anchors: they consolidate fragmented
+    content and match consistently regardless of how the question is phrased.
+    """
+    if not query_topics or not docs:
+        return docs[:max_k]
+
+    topic_set = set(query_topics)
+    boosted: list[Document] = []
+    rest: list[Document] = []
+
+    for doc in docs:
+        doc_type = doc.metadata.get("doc_type", "")
+        topic_cluster = doc.metadata.get("topic_cluster", "")
+        topic_clusters = doc.metadata.get("topic_clusters", "")
+
+        is_relevant_summary = False
+        if doc_type in ("topic_summary", "document_summary"):
+            if topic_cluster and topic_cluster in topic_set:
+                is_relevant_summary = True
+            elif topic_clusters:
+                doc_topics = set(topic_clusters.split(","))
+                if doc_topics & topic_set:
+                    is_relevant_summary = True
+
+        if is_relevant_summary:
+            boosted.append(doc)
+        else:
+            rest.append(doc)
+
+    return (boosted + rest)[:max_k]
+
+
 def _deduplicate_docs(
     doc_lists: list[list[Document]], max_k: int,
 ) -> list[Document]:
@@ -179,7 +234,11 @@ class LCDAwareRetriever(BaseRetriever):
         search_kwargs: dict = {"k": self.k}
         if self.metadata_filter is not None:
             search_kwargs["filter"] = self.metadata_filter
-        return self.store.similarity_search(query, **search_kwargs)
+        docs = self.store.similarity_search(query, **search_kwargs)
+        query_topics = detect_query_topics(query)
+        if query_topics:
+            docs = _boost_summaries(docs, query_topics, self.k)
+        return docs
 
     def _lcd_retrieve(self, query: str) -> list[Document]:
         # If metadata_filter explicitly specifies a non-MCD source, skip LCD-aware
@@ -216,7 +275,11 @@ class LCDAwareRetriever(BaseRetriever):
         base_docs = self.store.similarity_search(query, **base_kwargs)
 
         doc_lists = [mcd_docs] + variant_results + [base_docs]
-        return _deduplicate_docs(doc_lists, max_k=self.lcd_k)
+        merged = _deduplicate_docs(doc_lists, max_k=self.lcd_k)
+        query_topics = detect_query_topics(query)
+        if query_topics:
+            merged = _boost_summaries(merged, query_topics, self.lcd_k)
+        return merged
 
 
 def get_retriever(
