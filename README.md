@@ -65,7 +65,7 @@ python scripts/ingest_all.py [--source iom|mcd|codes|all] [--force] [--skip-inde
 python scripts/query.py [--filter-source iom|mcd|codes] [--filter-manual 100-02] [--filter-jurisdiction JL] [-k 8]
 ```
 
-- Retrieves top-k chunks by similarity, then generates an answer with the local LLM and prints cited sources.
+- Retrieves top-k chunks by similarity, then generates an answer with the local LLM and prints cited sources. With `pip install -e ".[dev]"` (which adds `rank-bm25`), the default retriever is **hybrid** (semantic + BM25, cross-source query expansion, source diversification); otherwise the LCD-aware semantic retriever is used.
 - **Env:** `LOCAL_LLM_MODEL`, `LOCAL_LLM_DEVICE` (e.g. `cpu` or `auto`), `LOCAL_LLM_MAX_NEW_TOKENS`, `LOCAL_LLM_REPETITION_PENALTY`. Use `CUDA_VISIBLE_DEVICES=""` for CPU-only.
 
 ### 4. Validate and evaluate
@@ -167,7 +167,9 @@ This provides the semantic bridge that allows natural-language queries like "Wha
 | wheelchair | 0.800 | 0.800 | 0.000 |
 | **Average** | 0.483 | **0.733** | **+0.250** |
 
-### Retrieval Evaluation (63 questions, k=5)
+### Retrieval Evaluation — Baseline (63 questions, k=5)
+
+Run on 2026-02-18 with semantic enrichment; semantic-only retriever.
 
 | Metric | Value |
 |--------|-------|
@@ -178,7 +180,7 @@ This provides the semantic bridge that allows natural-language queries like "Wha
 | Median latency | 4 ms |
 | p95 latency | 5 ms |
 
-#### Performance by category
+#### Performance by category (baseline)
 
 | Category | n | Hit Rate | MRR | P@k | NDCG@k |
 |----------|---|----------|-----|-----|--------|
@@ -196,21 +198,63 @@ This provides the semantic bridge that allows natural-language queries like "Wha
 | **code_lookup** | **7** | **57%** | **0.571** | **0.486** | **0.695** |
 | lcd_policy | 6 | 33% | 0.333 | 0.267 | 0.969 |
 
-#### Performance by expected source
+### Retrieval Evaluation — Hybrid retriever (63 questions, k=8)
+
+Run on 2026-02-19 with **hybrid retrieval**: semantic + BM25 (RRF), cross-source query expansion, and source diversification. Index: 35,487 chunks (IOM 17,238, MCD 9,244, codes 9,005).
+
+| Metric | Value |
+|--------|-------|
+| **Hit Rate** | **87.3%** (55/63) |
+| **MRR** | **0.694** |
+| **Avg Precision@k** | 0.540 |
+| **Avg Recall@k** | 0.714 |
+| **NDCG@k** | 0.944 |
+| Median latency | 442 ms |
+| p95 latency | 798 ms |
+
+#### Performance by category (hybrid)
+
+| Category | n | Hit Rate | MRR | P@k | R@k | NDCG@k |
+|----------|---|----------|-----|-----|-----|--------|
+| claims_billing | 6 | 100% | 1.000 | 0.94 | 1.0 | 0.98 |
+| coding_modifiers | 5 | 100% | 1.000 | 0.90 | 0.50 | 1.0 |
+| compliance | 3 | 100% | 0.567 | 0.29 | 1.0 | 0.88 |
+| consistency | 4 | 100% | 0.875 | 0.69 | 0.50 | 0.98 |
+| cross_source | 4 | 100% | 1.000 | 0.84 | 0.46 | 0.99 |
+| payment | 3 | 100% | 1.000 | 0.88 | 1.0 | 0.99 |
+| policy_coverage | 6 | 100% | 0.681 | 0.60 | 1.0 | 0.96 |
+| abbreviation | 5 | 100% | 0.467 | 0.28 | 0.80 | 0.94 |
+| appeals_denials | 5 | 80% | 0.490 | 0.45 | 0.80 | 0.96 |
+| semantic_retrieval | 5 | 80% | 0.567 | 0.30 | 0.80 | 0.97 |
+| code_lookup | 7 | 71% | 0.548 | 0.41 | 0.71 | 0.77 |
+| edge_case | 4 | 75% | 0.625 | 0.25 | 0.42 | 0.96 |
+| lcd_policy | 6 | 50% | 0.417 | 0.27 | 0.33 | 0.98 |
+
+#### Performance by expected source (hybrid)
 
 | Source | n | Hit Rate | MRR | P@k | NDCG@k |
 |--------|---|----------|-----|-----|--------|
-| iom | 52 | 85% | 0.728 | 0.615 | 0.973 |
-| codes | 18 | 78% | 0.750 | 0.644 | 0.872 |
-| mcd | 16 | 69% | 0.656 | 0.525 | 0.973 |
+| iom | 52 | 94.2% | 0.758 | 0.596 | 0.966 |
+| codes | 18 | 88.9% | 0.787 | 0.590 | 0.900 |
+| mcd | 16 | 75.0% | 0.656 | 0.461 | 0.975 |
 
-#### Performance by difficulty
+#### Performance by difficulty (hybrid)
 
 | Difficulty | n | Hit Rate | MRR | P@k | NDCG@k |
 |------------|---|----------|-----|-----|--------|
-| medium | 38 | 84% | 0.754 | 0.621 | 0.971 |
-| easy | 9 | 67% | 0.556 | 0.511 | 0.758 |
-| hard | 16 | 62% | 0.512 | 0.450 | 0.973 |
+| medium | 38 | 94.7% | 0.745 | 0.625 | 0.963 |
+| easy | 9 | 88.9% | 0.602 | 0.417 | 0.800 |
+| hard | 16 | 68.8% | 0.625 | 0.406 | 0.981 |
+
+#### Hybrid vs baseline (summary)
+
+| Metric | Baseline (k=5) | Hybrid (k=8) | Delta |
+|--------|----------------|--------------|-------|
+| Hit rate | 76.2% | **87.3%** | **+11.1 pp** |
+| MRR | 0.665 | **0.694** | +0.029 |
+| NDCG@k | 0.941 | 0.944 | +0.003 |
+
+Hybrid retrieval (semantic + BM25, cross-source expansion, source diversification) improves overall hit rate and MRR; IOM and codes expected-source metrics also improve. LCD policy remains the weakest category (50% hit rate). Latency is higher due to BM25 index and multiple queries per request.
 
 ### Key Findings
 
@@ -246,7 +290,7 @@ This provides the semantic bridge that allows natural-language queries like "Wha
 
 5. **Upgrade the LLM.** Replace TinyLlama with a larger model (e.g., Mistral-7B, Llama-3-8B) for better answer synthesis, reduced repetition, and proper citation formatting.
 
-6. **Improve cross-source retrieval.** Consider query expansion or hybrid search (keyword + semantic) to improve recall for queries that span IOM, MCD, and codes sources.
+6. ~~**Improve cross-source retrieval.**~~ **Done.** The dev branch adds a hybrid retriever (semantic + BM25 with RRF, cross-source query expansion, and source diversification). Hit rate improved from 76.2% to 87.3% (k=8); install with `pip install -e ".[dev]"` for the `rank-bm25` dependency.
 
 7. **Boost consistency.** For topics with fragmented content (like cardiac rehab), consider adding document-level summaries or topic clusters to improve retrieval stability across rephrasings.
 
