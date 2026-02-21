@@ -66,7 +66,7 @@ python scripts/ingest_all.py [--source iom|mcd|codes|all] [--force] [--skip-inde
 python scripts/query.py [--filter-source iom|mcd|codes] [--filter-manual 100-02] [--filter-jurisdiction JL] [-k 8]
 ```
 
-- Retrieves top-k chunks by similarity, then generates an answer with the local LLM and prints cited sources. With `pip install -e ".[dev]"` (which adds `rank-bm25`), the default retriever is **hybrid** (semantic + BM25 via Reciprocal Rank Fusion, cross-source query expansion, source diversification, topic-summary boosting). Without `rank-bm25`, the LCD-aware semantic retriever is used instead.
+- Retrieves top-k chunks by similarity, then generates an answer with the local LLM and prints cited sources. With `pip install -e ".[hybrid]"` (or `pip install -e ".[dev]"`, both of which add `rank-bm25`), the default retriever is **hybrid** (semantic + BM25 via Reciprocal Rank Fusion, cross-source query expansion, source diversification, topic-summary boosting). Without `rank-bm25`, the LCD-aware semantic retriever is used instead.
 - **Env:** `LOCAL_LLM_MODEL`, `LOCAL_LLM_DEVICE` (e.g. `cpu` or `auto`), `LOCAL_LLM_MAX_NEW_TOKENS`, `LOCAL_LLM_REPETITION_PENALTY`. Use `CUDA_VISIBLE_DEVICES=""` for CPU-only.
 
 ### 4. Validate and evaluate

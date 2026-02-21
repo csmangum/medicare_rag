@@ -1,4 +1,4 @@
-"""Centralised configuration for the Medicare RAG pipeline.
+"""Centralized configuration for the Medicare RAG pipeline.
 
 Reads settings from environment variables (via python-dotenv) with sensible
 defaults.  Numeric values use safe parsers that log a warning and fall back

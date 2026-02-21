@@ -150,7 +150,6 @@ Tests use `unittest.mock` to mock HTTP calls and external dependencies. No netwo
 - The Streamlit app and index store use `get_raw_collection(store)` from `index.store` to access the Chroma wrapper's underlying collection for batched metadata and dimension checks; this wraps the private `_collection` API and may need updating if langchain-chroma changes.
 - The hybrid retriever (`query/hybrid.py`) maintains a module-level singleton `BM25Index` that is lazily built from the Chroma collection and checked for staleness by document count. Use `reset_bm25_index()` in tests to avoid state leaking between test cases.
 - Topic definitions for clustering are loaded from `DATA_DIR/topic_definitions.json` if present, otherwise from the package default at `src/medicare_rag/data/topic_definitions.json`. Add new topics by extending the JSON file.
-- The Streamlit app and index store use `get_raw_collection(store)` from `index.store` to access the Chroma wrapper's underlying collection for batched metadata and dimension checks; this wraps the private `_collection` API and may need updating if langchain-chroma changes
 
 ## Retrieval Architecture
 
