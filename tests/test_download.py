@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from medicare_rag.download._manifest import file_sha256, write_manifest
-from medicare_rag.download._utils import sanitize_filename_from_url
+from medicare_rag.download._utils import sanitize_filename_from_url, stream_download
 from medicare_rag.download.codes import download_codes
 from medicare_rag.download.iom import download_iom
 from medicare_rag.download.mcd import _safe_extract_zip, download_mcd
@@ -365,6 +365,45 @@ def test_sanitize_filename_from_url_rejects_control_chars() -> None:
     assert sanitize_filename_from_url("https://example.com/doc%01.pdf", "default") == "default"
     # Newline in path segment
     assert sanitize_filename_from_url("https://example.com/foo%0abar", "default") == "default"
+
+
+def test_stream_download_rejects_file_scheme(tmp_path: Path) -> None:
+    """stream_download rejects file:// URLs to prevent local file access when env is compromised."""
+    mock_client = MagicMock()
+    dest = tmp_path / "test.bin"
+    with pytest.raises(ValueError, match="not allowed"):
+        stream_download(mock_client, "file:///etc/passwd", dest)
+    mock_client.stream.assert_not_called()
+
+
+def test_stream_download_rejects_non_http_schemes(tmp_path: Path) -> None:
+    """stream_download rejects ftp, gopher, and other non-http(s) schemes."""
+    mock_client = MagicMock()
+    dest = tmp_path / "test.bin"
+    for bad_url in ("ftp://example.com/file.zip", "gopher://example.com/", "data:text/plain,hello"):
+        with pytest.raises(ValueError, match="not allowed"):
+            stream_download(mock_client, bad_url, dest)
+    mock_client.stream.assert_not_called()
+
+
+def test_stream_download_accepts_http_and_https(tmp_path: Path) -> None:
+    """stream_download accepts http and https URLs (validation passes; fetch is mocked)."""
+    def make_stream_cm(*args, **kwargs):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        r.iter_bytes = MagicMock(return_value=iter([b"ok"]))
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=r)
+        cm.__exit__ = MagicMock(return_value=False)
+        return cm
+
+    mock_client = MagicMock()
+    mock_client.stream.side_effect = make_stream_cm
+    dest = tmp_path / "test.bin"
+    for url in ("https://example.com/file.zip", "http://localhost:8000/data.zip"):
+        stream_download(mock_client, url, dest)
+    assert mock_client.stream.call_count == 2
+    assert dest.read_bytes() == b"ok"
 
 
 def test_iom_duplicate_filenames_disambiguated(tmp_raw: Path) -> None:
