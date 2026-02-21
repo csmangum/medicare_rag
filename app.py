@@ -1,4 +1,9 @@
-"""Streamlit app for testing Medicare RAG embedding search.
+"""Streamlit app for Medicare RAG search and Q&A.
+
+Supports:
+  - Hybrid retrieval (semantic + BM25) with LCD-aware query expansion
+  - Raw semantic search with distance scores
+  - Optional RAG answers via local LLM
 
 Launch:
     streamlit run app.py
@@ -13,17 +18,29 @@ from typing import Any
 
 import streamlit as st
 
-from medicare_rag.config import COLLECTION_NAME, EMBEDDING_MODEL
+from medicare_rag.config import (
+    COLLECTION_NAME,
+    EMBEDDING_MODEL,
+)
 from medicare_rag.index.embed import get_embeddings
 from medicare_rag.index.store import (
     GET_META_BATCH_SIZE,
     get_or_create_chroma,
     get_raw_collection,
 )
+from medicare_rag.query.retriever import get_retriever
+
+try:
+    from medicare_rag.query.chain import run_rag as _run_rag
+
+    _RAG_AVAILABLE = True
+except ImportError:
+    _run_rag = None  # type: ignore[assignment]
+    _RAG_AVAILABLE = False
 
 st.set_page_config(
-    page_title="Medicare Embedding Search",
-    page_icon="🔍",
+    page_title="Medicare RAG",
+    page_icon="🩺",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -31,6 +48,7 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # Cached resources
 # ---------------------------------------------------------------------------
+
 
 @st.cache_resource(show_spinner="Loading embedding model...")
 def _load_embeddings():
@@ -43,18 +61,34 @@ def _load_store():
     return get_or_create_chroma(emb)
 
 
+def _run_hybrid_search(
+    query: str,
+    k: int,
+    metadata_filter: dict | None,
+) -> list[Any]:
+    """Run retrieval via get_retriever (Hybrid or LCDAware)."""
+    retriever = get_retriever(k=k, metadata_filter=metadata_filter)
+    return retriever.invoke(query)
+
+
 @st.cache_data(show_spinner=False, ttl=300)
 def _get_collection_meta(_store) -> dict[str, Any]:
-    """Gather metadata stats from the Chroma collection for filter options.
+    """Gather aggregated metadata stats from the Chroma collection for filter widgets.
 
-    Cached for 5 minutes to avoid reloading all metadata on every rerun.
-    Cache will automatically invalidate after TTL expires, allowing new documents
-    to appear in filters.
-    Fetches metadata in batches to avoid ChromaDB/SQLite "too many SQL variables" error.
+    This function is intentionally cached with ``st.cache_data`` and a short TTL
+    (300 seconds). The TTL-based invalidation keeps the per-request overhead low
+    while still allowing updates to the underlying collection to be picked up
+    periodically without manual cache clears.
 
-    Args:
-        _store: Chroma vector store. Underscore prefix follows Streamlit convention
-                to exclude this parameter from the cache key (only TTL-based invalidation).
+    Metadata is read in batches of size ``GET_META_BATCH_SIZE`` via repeated
+    ``collection.get(...)`` calls instead of a single unbounded query. This
+    batching avoids hitting SQLite / Chroma limits on query size and reduces the
+    chance of database errors when the collection grows large.
+
+    The ``_store`` parameter is the cached Chroma store handle obtained from
+    ``_load_store()``. The leading underscore indicates that it is an internal
+    implementation detail (not user input) and is threaded through primarily so
+    that Streamlit's cache key includes the underlying store instance.
     """
     collection = get_raw_collection(_store)
     if collection.count() == 0:
@@ -96,7 +130,13 @@ def _get_collection_meta(_store) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Quick-check bubble questions
+# Search mode constants
+# ---------------------------------------------------------------------------
+_MODE_HYBRID = "Hybrid (recommended)"
+_MODE_RAW = "Raw semantic"
+
+# ---------------------------------------------------------------------------
+# Quick-check questions
 # ---------------------------------------------------------------------------
 QUICK_QUESTIONS: list[str] = [
     "What is Medicare timely filing?",
@@ -110,82 +150,87 @@ QUICK_QUESTIONS: list[str] = [
 ]
 
 # ---------------------------------------------------------------------------
-# CSS for result cards
+# CSS: clean, modern design (light theme)
 # ---------------------------------------------------------------------------
 _CUSTOM_CSS = """
 <style>
-/* Result card styling */
+/* Main area */
+.main .block-container {
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+    max-width: 1100px;
+}
+
+/* Result card */
 div.result-card {
-    border: 1px solid #e5e7eb;
-    border-radius: 0.75rem;
-    padding: 1rem 1.25rem;
-    margin-bottom: 0.75rem;
-    background: #fafbfc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1rem;
+    background: #f8fafc;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 div.result-card:hover {
     border-color: #6366f1;
-    box-shadow: 0 1px 4px rgba(99,102,241,0.12);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
 }
 div.result-card .card-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+div.result-card .card-title {
+    font-weight: 600;
+    font-size: 0.95rem;
 }
 div.result-card .score-badge {
-    background: #e0e7ff;
+    background: #eef2ff;
     color: #4338ca;
-    padding: 0.15rem 0.6rem;
-    border-radius: 0.75rem;
-    font-size: 0.8rem;
-    font-weight: 600;
+    padding: 0.2rem 0.65rem;
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    flex-shrink: 0;
 }
 div.result-card .meta-pills {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
-    margin-bottom: 0.5rem;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
 }
 div.result-card .meta-pill {
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.5rem;
-    padding: 0.1rem 0.5rem;
-    font-size: 0.75rem;
-    color: #374151;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.35rem;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.72rem;
+    color: #64748b;
 }
 div.result-card .content-preview {
     font-size: 0.9rem;
-    color: #1f2937;
-    line-height: 1.5;
+    line-height: 1.6;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+/* Quick-question chips */
+.stButton > button[kind="secondary"] {
+    border-radius: 0.5rem !important;
+    font-size: 0.85rem !important;
 }
 </style>
 """
 
 # ---------------------------------------------------------------------------
-# Helper: run similarity search
+# Helpers
 # ---------------------------------------------------------------------------
 
-def _run_search(
-    store,
-    query: str,
-    k: int,
-    metadata_filter: dict | None,
-    score_threshold: float | None,
-) -> list[tuple[Any, float]]:
-    """Run similarity_search_with_score and return results."""
-    kwargs: dict[str, Any] = {"k": k}
-    if metadata_filter:
-        kwargs["filter"] = metadata_filter
 
-    results = store.similarity_search_with_score(query, **kwargs)
-
-    if score_threshold is not None:
-        results = [(doc, score) for doc, score in results if score <= score_threshold]
-
-    return results
+def _escape(text: str) -> str:
+    """HTML entity escaping for safe display in markdown."""
+    return html.escape(text, quote=True)
 
 
 def _build_metadata_filter(
@@ -196,69 +241,20 @@ def _build_metadata_filter(
     """Build a Chroma where-clause dict from sidebar selections."""
     parts: dict[str, str] = {}
     if source_filter and source_filter != "All":
-        # Convert back to lowercase since ChromaDB stores lowercase source values
         parts["source"] = source_filter.lower()
     if manual_filter and manual_filter != "All":
         parts["manual"] = manual_filter
     if jurisdiction_filter and jurisdiction_filter != "All":
         parts["jurisdiction"] = jurisdiction_filter
 
-    # ChromaDB requires exactly one key in a where-clause dict.
-    # If we have multiple filters, wrap them in $and operator.
     if len(parts) > 1:
         return {"$and": [{k: v} for k, v in parts.items()]}
 
     return parts or None
 
 
-def _render_result_card(rank: int, doc: Any, score: float, show_full: bool) -> None:
-    """Render a single search result as a styled card."""
-    meta = doc.metadata or {}
-    content = doc.page_content or ""
-
-    source_label = meta.get("source", "unknown").upper()
-    doc_id = meta.get("doc_id", "")
-    title = meta.get("title", "")
-
-    header_text = title if title else doc_id if doc_id else f"Result {rank}"
-
-    # Build pill metadata
-    pills_html = ""
-    pill_keys = [
-        ("source", source_label),
-        ("manual", meta.get("manual")),
-        ("chapter", meta.get("chapter")),
-        ("jurisdiction", meta.get("jurisdiction")),
-        ("effective_date", meta.get("effective_date")),
-    ]
-    for label, val in pill_keys:
-        if val:
-            pills_html += f'<span class="meta-pill"><b>{label}:</b> {_escape(str(val))}</span>'
-
-    preview = content if show_full else (content[:500] + "..." if len(content) > 500 else content)
-
-    card_html = f"""
-    <div class="result-card">
-        <div class="card-header">
-            <b>#{rank} &mdash; {_escape(header_text[:120])}</b>
-            <span class="score-badge">dist: {score:.4f}</span>
-        </div>
-        <div class="meta-pills">{pills_html}</div>
-        <div class="content-preview">{_escape(preview)}</div>
-    </div>
-    """
-    st.markdown(card_html, unsafe_allow_html=True)
-
-
-def _escape(text: str) -> str:
-    """HTML entity escaping for safe display in markdown."""
-    return html.escape(text, quote=True)
-
-
 def _get_embedding_dimensions(store, embeddings) -> tuple[int | None, int]:
-    """Return (collection_embedding_dim, current_model_dim).
-    collection_embedding_dim is None if the collection is empty.
-    """
+    """Return (collection_embedding_dim, current_model_dim)."""
     collection = get_raw_collection(store)
     model_dim: int = len(embeddings.embed_query("x"))
     try:
@@ -273,16 +269,85 @@ def _get_embedding_dimensions(store, embeddings) -> tuple[int | None, int]:
     return (None, model_dim)
 
 
+def _run_raw_search(
+    store,
+    query: str,
+    k: int,
+    metadata_filter: dict | None,
+    score_threshold: float | None,
+) -> list[tuple[Any, float]]:
+    """Run raw similarity_search_with_score for distance display."""
+    kwargs: dict[str, Any] = {"k": k}
+    if metadata_filter:
+        kwargs["filter"] = metadata_filter
+
+    results = store.similarity_search_with_score(query, **kwargs)
+
+    if score_threshold is not None:
+        results = [(doc, score) for doc, score in results if score <= score_threshold]
+
+    return results
+
+
+def _render_result_card(
+    rank: int, doc: Any, score: float | None, show_full: bool
+) -> None:
+    """Render a single search result as a styled card."""
+    meta = doc.metadata or {}
+    content = doc.page_content or ""
+
+    source_label = meta.get("source", "unknown").upper()
+    doc_id = meta.get("doc_id", "")
+    title = meta.get("title", "")
+
+    header_text = title if title else doc_id if doc_id else f"Result {rank}"
+
+    pills_html = ""
+    pill_keys = [
+        ("source", source_label),
+        ("manual", meta.get("manual")),
+        ("chapter", meta.get("chapter")),
+        ("jurisdiction", meta.get("jurisdiction")),
+        ("effective_date", meta.get("effective_date")),
+    ]
+    for label, val in pill_keys:
+        if val:
+            pills_html += f'<span class="meta-pill"><b>{label}:</b> {_escape(str(val))}</span>'
+
+    preview = (
+        content
+        if show_full
+        else (content[:500] + "..." if len(content) > 500 else content)
+    )
+
+    score_badge = ""
+    if score is not None:
+        score_badge = f'<span class="score-badge">dist: {score:.4f}</span>'
+
+    card_html = f"""
+    <div class="result-card">
+        <div class="card-header">
+            <span class="card-title">#{rank} &mdash; {_escape(header_text[:120])}</span>
+            {score_badge}
+        </div>
+        <div class="meta-pills">{pills_html}</div>
+        <div class="content-preview">{_escape(preview)}</div>
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+
+
 # ---------------------------------------------------------------------------
 # Main app
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     st.markdown(_CUSTOM_CSS, unsafe_allow_html=True)
 
     # ---- Sidebar ----
     with st.sidebar:
-        st.header("Search Settings")
+        st.header("🔧 Settings")
 
         store = _load_store()
         embeddings = _load_embeddings()
@@ -291,23 +356,21 @@ def main() -> None:
 
         coll_dim, model_dim = _get_embedding_dimensions(store, embeddings)
         dimension_mismatch = (
-            doc_count > 0
-            and coll_dim is not None
-            and coll_dim != model_dim
+            doc_count > 0 and coll_dim is not None and coll_dim != model_dim
         )
 
-        st.caption(f"Collection: **{COLLECTION_NAME}**")
-        st.caption(f"Documents indexed: **{doc_count:,}**")
-        st.caption(f"Embedding model: `{EMBEDDING_MODEL}`")
+        st.caption(f"**Collection:** `{COLLECTION_NAME}`")
+        st.caption(f"**Documents:** {doc_count:,}")
+        st.caption(f"**Model:** `{EMBEDDING_MODEL}`")
 
         st.divider()
 
         if doc_count == 0:
-            st.warning("Index is empty. Run ingestion first (`scripts/ingest_all.py`).")
+            st.warning("Index is empty. Run `scripts/ingest_all.py` first.")
         elif dimension_mismatch:
-            st.error(f"Embedding dimension mismatch: index={coll_dim}, model={model_dim}")
+            st.error(f"Dimension mismatch: index={coll_dim}, model={model_dim}")
 
-        # -- Filters --
+        # Filters
         st.subheader("Filters")
 
         source_options = ["All"] + [s.upper() for s in meta_info["sources"]]
@@ -320,100 +383,169 @@ def main() -> None:
         jurisdiction_filter = st.selectbox("Jurisdiction", jurisdiction_options, index=0)
 
         st.divider()
-
-        # -- Advanced Options --
-        st.subheader("Advanced Options")
+        st.subheader("Options")
 
         k = st.slider("Top-K results", min_value=1, max_value=50, value=10, step=1)
 
-        use_threshold = st.checkbox("Apply distance threshold", value=False)
+        search_mode = st.radio(
+            "Search mode",
+            [_MODE_HYBRID, _MODE_RAW],
+            help="Hybrid uses semantic + BM25 with LCD-aware expansion. Raw shows distance scores.",
+        )
+
+        use_threshold: bool = False
         score_threshold: float | None = None
-        if use_threshold:
-            score_threshold = st.slider(
-                "Max distance (lower = more similar)",
-                min_value=0.0,
-                max_value=2.0,
-                value=1.0,
-                step=0.05,
-            )
+        if search_mode == _MODE_RAW:
+            use_threshold = st.checkbox("Apply distance threshold", value=False)
+            if use_threshold:
+                score_threshold = st.slider(
+                    "Max distance (lower = more similar)",
+                    min_value=0.0,
+                    max_value=2.0,
+                    value=1.0,
+                    step=0.05,
+                )
 
         show_full_content = st.checkbox("Show full chunk content", value=False)
 
-    # ---- Main Area ----
-    st.title("Medicare Embedding Search")
+    metadata_filter = _build_metadata_filter(
+        source_filter or "All",
+        manual_filter or "All",
+        jurisdiction_filter or "All",
+    )
+
+    # ---- Main area ----
+    st.title("Medicare RAG")
     st.markdown(
-        "Search your indexed Medicare documents by semantic similarity. "
-        "Use the sidebar to filter and tune results."
+        "Search Medicare Revenue Cycle documents using hybrid retrieval (semantic + keyword). "
+        "Ask questions and get cited answers."
     )
 
-    # -- Quick-check bubbles --
-    st.markdown("##### Quick checks")
-    bubble_cols = st.columns(4)
-    for i, q in enumerate(QUICK_QUESTIONS):
-        col = bubble_cols[i % 4]
-        if col.button(q, key=f"bubble_{i}", use_container_width=True):
-            st.session_state.search_input = q
+    # Tabs: Search | RAG Answer
+    tab_search, tab_rag = st.tabs(["🔍 Search", "💬 RAG Answer"])
 
-    st.divider()
+    # ---- Search tab ----
+    with tab_search:
+        st.markdown("#### Quick questions")
+        bubble_cols = st.columns(4)
+        for i, q in enumerate(QUICK_QUESTIONS):
+            col = bubble_cols[i % 4]
+            if col.button(q, key=f"bubble_{i}", use_container_width=True):
+                st.session_state.search_input = q
 
-    # -- Search bar --
-    query = st.text_input(
-        "Search query",
-        placeholder="Type your search query here...",
-        key="search_input",
-    )
+        st.divider()
 
-    if query and dimension_mismatch:
-        st.error(
-            "**Embedding dimension mismatch.** The index was built with a different "
-            f"embedding model (expected dimension **{coll_dim}**). The current model "
-            f"(`{EMBEDDING_MODEL}`) produces dimension **{model_dim}**. Set "
-            "`EMBEDDING_MODEL` in `.env` to the model used during ingest "
-            f"(e.g. one that outputs {coll_dim}-dim vectors), or re-run ingestion: "
-            "`python scripts/ingest_all.py`."
-        )
-    elif query and doc_count > 0:
-        metadata_filter = _build_metadata_filter(
-            source_filter or "All",
-            manual_filter or "All",
-            jurisdiction_filter or "All",
+        query = st.text_input(
+            "Search query",
+            placeholder="Type your Medicare RCM question...",
+            key="search_input",
         )
 
-        try:
-            with st.spinner("Searching embeddings..."):
-                t0 = time.perf_counter()
-                results = _run_search(store, query, k, metadata_filter, score_threshold)
-                elapsed = time.perf_counter() - t0
+        if query and dimension_mismatch:
+            st.error(
+                f"**Embedding dimension mismatch.** Index expects **{coll_dim}**-dim vectors, "
+                f"model produces **{model_dim}**. Update `EMBEDDING_MODEL` in `.env` or re-ingest."
+            )
+        elif query and doc_count > 0:
+            try:
+                if search_mode == _MODE_HYBRID:
+                    with st.spinner("Searching (hybrid semantic + keyword)..."):
+                        t0 = time.perf_counter()
+                        docs = _run_hybrid_search(query, k, metadata_filter)
+                        elapsed = time.perf_counter() - t0
 
-            st.markdown(f"**{len(results)}** results in **{elapsed:.3f}s**")
+                    st.markdown(f"**{len(docs)}** results in **{elapsed:.3f}s**")
 
-            if not results:
-                st.info(
-                    "No results matched your query and filters. "
-                    "Try broadening your search or adjusting filters."
+                    if not docs:
+                        st.info(
+                            "No results matched. Try broadening your search or adjusting filters."
+                        )
+                    else:
+                        for rank, doc in enumerate(docs, start=1):
+                            _render_result_card(rank, doc, None, show_full_content)
+                else:
+                    with st.spinner("Searching embeddings..."):
+                        t0 = time.perf_counter()
+                        results = _run_raw_search(
+                            store, query, k, metadata_filter, score_threshold
+                        )
+                        elapsed = time.perf_counter() - t0
+
+                    st.markdown(f"**{len(results)}** results in **{elapsed:.3f}s**")
+
+                    if not results:
+                        st.info(
+                            "No results matched. Try broadening your search or adjusting filters."
+                        )
+                    else:
+                        for rank, (doc, score) in enumerate(results, start=1):
+                            _render_result_card(
+                                rank, doc, score, show_full_content
+                            )
+            except (ValueError, RuntimeError) as e:
+                err_msg = str(e)
+                match = re.search(
+                    r"dimension of (\d+), got (\d+)", err_msg, re.IGNORECASE
                 )
-            else:
-                for rank, (doc, score) in enumerate(results, start=1):
-                    _render_result_card(rank, doc, score, show_full_content)
-        except Exception as e:  # noqa: BLE001
-            err_msg = str(e)
-            # ChromaDB raises InvalidArgumentError when embedding dimensions don't match
-            match = re.search(r"dimension of (\d+), got (\d+)", err_msg, re.IGNORECASE)
-            if match:
-                expected_dim, got_dim = int(match.group(1)), int(match.group(2))
-                st.error(
-                    "**Embedding dimension mismatch.** The index was built with a different "
-                    f"embedding model (expected dimension **{expected_dim}**). The current model "
-                    f"(`{EMBEDDING_MODEL}`) produces dimension **{got_dim}**. Set "
-                    "`EMBEDDING_MODEL` in `.env` to the model used during ingest "
-                    f"(e.g. one that outputs {expected_dim}-dim vectors), or re-run ingestion: "
-                    "`python scripts/ingest_all.py`."
-                )
-            else:
-                raise
+                if match:
+                    expected_dim, got_dim = int(match.group(1)), int(match.group(2))
+                    st.error(
+                        f"**Dimension mismatch.** Index expects **{expected_dim}**, "
+                        f"model produces **{got_dim}**. Fix `EMBEDDING_MODEL` or re-ingest."
+                    )
+                else:
+                    raise
 
-    elif query and doc_count == 0:
-        st.error("Cannot search: the index is empty. Please run ingestion first.")
+        elif query and doc_count == 0:
+            st.error("Index is empty. Run `scripts/ingest_all.py` first.")
+
+    # ---- RAG tab ----
+    with tab_rag:
+        if "rag_result" not in st.session_state:
+            st.session_state.rag_result = None  # (answer, source_docs, elapsed) or None
+
+        rag_query = st.text_input(
+            "Ask a question",
+            placeholder="e.g. What is Medicare timely filing?",
+            key="rag_input",
+        )
+
+        if rag_query and doc_count > 0 and not dimension_mismatch:
+            if st.button("Get answer", type="primary"):
+                if not _RAG_AVAILABLE:
+                    st.error(
+                        "RAG dependencies not installed. "
+                        "Run `pip install -e .` to install `langchain-huggingface`."
+                    )
+                    st.session_state.rag_result = None
+                else:
+                    try:
+                        with st.spinner("Retrieving and generating answer..."):
+                            t0 = time.perf_counter()
+                            answer, source_docs = _run_rag(
+                                rag_query,
+                                retriever=None,
+                                k=k,
+                                metadata_filter=metadata_filter,
+                            )
+                            elapsed = time.perf_counter() - t0
+                        st.session_state.rag_result = (answer, source_docs, elapsed)
+                    except (ValueError, RuntimeError, OSError, ImportError) as e:
+                        st.error(f"RAG failed: {e}")
+                        st.session_state.rag_result = None
+
+            if st.session_state.rag_result is not None:
+                answer, source_docs, elapsed = st.session_state.rag_result
+                st.markdown("#### Answer")
+                st.markdown(answer)
+                st.caption(f"Generated in **{elapsed:.2f}s**")
+
+                st.markdown("#### Sources")
+                for rank, doc in enumerate(source_docs, start=1):
+                    _render_result_card(rank, doc, None, show_full_content)
+
+        elif rag_query and (doc_count == 0 or dimension_mismatch):
+            st.error("Index is empty or has dimension mismatch. Fix before using RAG.")
 
 
 if __name__ == "__main__":
