@@ -28,6 +28,15 @@ from medicare_rag.index.store import (
     get_or_create_chroma,
     get_raw_collection,
 )
+from medicare_rag.query.retriever import get_retriever
+
+try:
+    from medicare_rag.query.chain import run_rag as _run_rag
+
+    _RAG_AVAILABLE = True
+except ImportError:
+    _run_rag = None  # type: ignore[assignment]
+    _RAG_AVAILABLE = False
 
 st.set_page_config(
     page_title="Medicare RAG",
@@ -52,16 +61,35 @@ def _load_store():
     return get_or_create_chroma(emb)
 
 
-def _get_retriever(k: int, metadata_filter: dict | None):
-    """Build retriever (Hybrid or LCDAware) with given params. Not cached - creation is cheap."""
-    from medicare_rag.query.retriever import get_retriever
-
-    return get_retriever(k=k, metadata_filter=metadata_filter)
+def _run_hybrid_search(
+    query: str,
+    k: int,
+    metadata_filter: dict | None,
+) -> list[Any]:
+    """Run retrieval via get_retriever (Hybrid or LCDAware)."""
+    retriever = get_retriever(k=k, metadata_filter=metadata_filter)
+    return retriever.invoke(query)
 
 
 @st.cache_data(show_spinner=False, ttl=300)
 def _get_collection_meta(_store) -> dict[str, Any]:
-    """Gather metadata stats from the Chroma collection for filter options."""
+    """Gather aggregated metadata stats from the Chroma collection for filter widgets.
+
+    This function is intentionally cached with ``st.cache_data`` and a short TTL
+    (300 seconds). The TTL-based invalidation keeps the per-request overhead low
+    while still allowing updates to the underlying collection to be picked up
+    periodically without manual cache clears.
+
+    Metadata is read in batches of size ``GET_META_BATCH_SIZE`` via repeated
+    ``collection.get(...)`` calls instead of a single unbounded query. This
+    batching avoids hitting SQLite / Chroma limits on query size and reduces the
+    chance of database errors when the collection grows large.
+
+    The ``_store`` parameter is the cached Chroma store handle obtained from
+    ``_load_store()``. The leading underscore indicates that it is an internal
+    implementation detail (not user input) and is threaded through primarily so
+    that Streamlit's cache key includes the underlying store instance.
+    """
     collection = get_raw_collection(_store)
     if collection.count() == 0:
         return {"count": 0, "sources": [], "manuals": [], "jurisdictions": []}
@@ -102,6 +130,12 @@ def _get_collection_meta(_store) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Search mode constants
+# ---------------------------------------------------------------------------
+_MODE_HYBRID = "Hybrid (recommended)"
+_MODE_RAW = "Raw semantic"
+
+# ---------------------------------------------------------------------------
 # Quick-check questions
 # ---------------------------------------------------------------------------
 QUICK_QUESTIONS: list[str] = [
@@ -116,7 +150,7 @@ QUICK_QUESTIONS: list[str] = [
 ]
 
 # ---------------------------------------------------------------------------
-# CSS: clean, modern design (theme-agnostic)
+# CSS: clean, modern design (light theme)
 # ---------------------------------------------------------------------------
 _CUSTOM_CSS = """
 <style>
@@ -233,17 +267,6 @@ def _get_embedding_dimensions(store, embeddings) -> tuple[int | None, int]:
     except Exception:
         pass
     return (None, model_dim)
-
-
-def _run_hybrid_search(
-    store,
-    query: str,
-    k: int,
-    metadata_filter: dict | None,
-) -> list[Any]:
-    """Run retrieval via get_retriever (Hybrid or LCDAware)."""
-    retriever = _get_retriever(k, metadata_filter)
-    return retriever.invoke(query)
 
 
 def _run_raw_search(
@@ -366,13 +389,13 @@ def main() -> None:
 
         search_mode = st.radio(
             "Search mode",
-            ["Hybrid (recommended)", "Raw semantic"],
+            [_MODE_HYBRID, _MODE_RAW],
             help="Hybrid uses semantic + BM25 with LCD-aware expansion. Raw shows distance scores.",
         )
 
         use_threshold: bool = False
         score_threshold: float | None = None
-        if search_mode == "Raw semantic":
+        if search_mode == _MODE_RAW:
             use_threshold = st.checkbox("Apply distance threshold", value=False)
             if use_threshold:
                 score_threshold = st.slider(
@@ -425,10 +448,10 @@ def main() -> None:
             )
         elif query and doc_count > 0:
             try:
-                if search_mode == "Hybrid (recommended)":
+                if search_mode == _MODE_HYBRID:
                     with st.spinner("Searching (hybrid semantic + keyword)..."):
                         t0 = time.perf_counter()
-                        docs = _run_hybrid_search(store, query, k, metadata_filter)
+                        docs = _run_hybrid_search(query, k, metadata_filter)
                         elapsed = time.perf_counter() - t0
 
                     st.markdown(f"**{len(docs)}** results in **{elapsed:.3f}s**")
@@ -459,7 +482,7 @@ def main() -> None:
                             _render_result_card(
                                 rank, doc, score, show_full_content
                             )
-            except Exception as e:
+            except (ValueError, RuntimeError) as e:
                 err_msg = str(e)
                 match = re.search(
                     r"dimension of (\d+), got (\d+)", err_msg, re.IGNORECASE
@@ -478,6 +501,9 @@ def main() -> None:
 
     # ---- RAG tab ----
     with tab_rag:
+        if "rag_result" not in st.session_state:
+            st.session_state.rag_result = None  # (answer, source_docs, elapsed) or None
+
         rag_query = st.text_input(
             "Ask a question",
             placeholder="e.g. What is Medicare timely filing?",
@@ -486,28 +512,37 @@ def main() -> None:
 
         if rag_query and doc_count > 0 and not dimension_mismatch:
             if st.button("Get answer", type="primary"):
-                try:
-                    with st.spinner("Retrieving and generating answer..."):
-                        from medicare_rag.query.chain import run_rag
+                if not _RAG_AVAILABLE:
+                    st.error(
+                        "RAG dependencies not installed. "
+                        "Run `pip install -e .` to install `langchain-huggingface`."
+                    )
+                    st.session_state.rag_result = None
+                else:
+                    try:
+                        with st.spinner("Retrieving and generating answer..."):
+                            t0 = time.perf_counter()
+                            answer, source_docs = _run_rag(
+                                rag_query,
+                                retriever=None,
+                                k=k,
+                                metadata_filter=metadata_filter,
+                            )
+                            elapsed = time.perf_counter() - t0
+                        st.session_state.rag_result = (answer, source_docs, elapsed)
+                    except (ValueError, RuntimeError, OSError, ImportError) as e:
+                        st.error(f"RAG failed: {e}")
+                        st.session_state.rag_result = None
 
-                        t0 = time.perf_counter()
-                        answer, source_docs = run_rag(
-                            rag_query,
-                            retriever=None,
-                            k=k,
-                            metadata_filter=metadata_filter,
-                        )
-                        elapsed = time.perf_counter() - t0
+            if st.session_state.rag_result is not None:
+                answer, source_docs, elapsed = st.session_state.rag_result
+                st.markdown("#### Answer")
+                st.markdown(answer)
+                st.caption(f"Generated in **{elapsed:.2f}s**")
 
-                    st.markdown("#### Answer")
-                    st.markdown(answer)
-                    st.caption(f"Generated in **{elapsed:.2f}s**")
-
-                    st.markdown("#### Sources")
-                    for rank, doc in enumerate(source_docs, start=1):
-                        _render_result_card(rank, doc, None, show_full_content)
-                except Exception as e:
-                    st.error(f"RAG failed: {e}")
+                st.markdown("#### Sources")
+                for rank, doc in enumerate(source_docs, start=1):
+                    _render_result_card(rank, doc, None, show_full_content)
 
         elif rag_query and (doc_count == 0 or dimension_mismatch):
             st.error("Index is empty or has dimension mismatch. Fix before using RAG.")
