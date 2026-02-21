@@ -4,9 +4,11 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 
-from medicare_rag.config import DOWNLOAD_TIMEOUT  # noqa: F401
+from medicare_rag.config import DOWNLOAD_TIMEOUT
 
 _ALLOWED_SCHEMES = ("http", "https")
+
+__all__ = ("DOWNLOAD_TIMEOUT",)
 
 
 def _validate_download_url(url: str) -> None:
