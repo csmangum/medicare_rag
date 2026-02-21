@@ -1,4 +1,6 @@
 """Tests for Streamlit app helpers (embedding search UI)."""
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 pytest.importorskip("streamlit")
@@ -134,3 +136,75 @@ class TestGetCollectionMeta:
         assert sorted(result["sources"]) == ["codes", "iom", "mcd"]
         assert sorted(result["manuals"]) == ["100-02", "100-03"]
         assert result["jurisdictions"] == ["J-B"]
+
+
+class TestRunHybridSearch:
+    def test_returns_retriever_results(self) -> None:
+        fake_docs = [MagicMock(), MagicMock()]
+        mock_retriever = MagicMock()
+        mock_retriever.invoke.return_value = fake_docs
+
+        with patch.object(app, "get_retriever", return_value=mock_retriever):
+            result = app._run_hybrid_search("Medicare timely filing", k=5, metadata_filter=None)
+
+        mock_retriever.invoke.assert_called_once_with("Medicare timely filing")
+        assert result == fake_docs
+
+    def test_passes_k_and_filter_to_retriever_factory(self) -> None:
+        mock_retriever = MagicMock()
+        mock_retriever.invoke.return_value = []
+        flt = {"source": "iom"}
+
+        with patch.object(app, "get_retriever", return_value=mock_retriever) as mock_get:
+            app._run_hybrid_search("query", k=3, metadata_filter=flt)
+
+        mock_get.assert_called_once_with(k=3, metadata_filter=flt)
+
+    def test_returns_empty_list_when_no_results(self) -> None:
+        mock_retriever = MagicMock()
+        mock_retriever.invoke.return_value = []
+
+        with patch.object(app, "get_retriever", return_value=mock_retriever):
+            result = app._run_hybrid_search("no match query", k=10, metadata_filter=None)
+
+        assert result == []
+
+
+class TestRunRawSearch:
+    def _make_store(self, docs_with_scores):
+        mock_store = MagicMock()
+        mock_store.similarity_search_with_score.return_value = docs_with_scores
+        return mock_store
+
+    def test_returns_all_results_without_threshold(self) -> None:
+        doc1, doc2 = MagicMock(), MagicMock()
+        store = self._make_store([(doc1, 0.5), (doc2, 1.2)])
+
+        result = app._run_raw_search(store, "query", k=5, metadata_filter=None, score_threshold=None)
+
+        assert result == [(doc1, 0.5), (doc2, 1.2)]
+        store.similarity_search_with_score.assert_called_once_with("query", k=5)
+
+    def test_applies_score_threshold(self) -> None:
+        doc1, doc2, doc3 = MagicMock(), MagicMock(), MagicMock()
+        store = self._make_store([(doc1, 0.3), (doc2, 0.8), (doc3, 1.5)])
+
+        result = app._run_raw_search(store, "query", k=5, metadata_filter=None, score_threshold=0.9)
+
+        assert result == [(doc1, 0.3), (doc2, 0.8)]
+
+    def test_passes_metadata_filter(self) -> None:
+        store = self._make_store([])
+        flt = {"source": "mcd"}
+
+        app._run_raw_search(store, "query", k=3, metadata_filter=flt, score_threshold=None)
+
+        store.similarity_search_with_score.assert_called_once_with("query", k=3, filter=flt)
+
+    def test_returns_empty_list_when_all_filtered_by_threshold(self) -> None:
+        doc = MagicMock()
+        store = self._make_store([(doc, 1.9)])
+
+        result = app._run_raw_search(store, "query", k=5, metadata_filter=None, score_threshold=0.5)
+
+        assert result == []
