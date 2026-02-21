@@ -51,11 +51,12 @@ python scripts/download_all.py [--source iom|mcd|codes|all] [--force]
 ### 2. Ingest (extract → chunk → embed → store)
 
 ```bash
-python scripts/ingest_all.py [--source iom|mcd|codes|all] [--force] [--skip-index]
+python scripts/ingest_all.py [--source iom|mcd|codes|all] [--force] [--skip-index] [--no-summaries]
 ```
 
 - **Extract:** PDFs (pdfplumber; optional `unstructured` for image-heavy PDFs), MCD/codes from structured files. HCPCS and ICD-10-CM documents are automatically enriched with category labels, synonyms, and related terms (e.g., E-codes get "Durable Medical Equipment: wheelchair, hospital bed, oxygen equipment...") to improve semantic retrieval.
-- **Chunk:** LangChain text splitters; metadata (source, manual, jurisdiction, etc.) is preserved.
+- **Chunk:** LangChain text splitters; MCD/LCD documents use larger chunks (`LCD_CHUNK_SIZE=1500`) to preserve policy context. Metadata (source, manual, jurisdiction, etc.) is preserved.
+- **Topic summaries:** By default, document-level and topic-cluster summaries are generated (extractive, no LLM needed) and indexed alongside regular chunks. These act as stable retrieval anchors for fragmented topics. Disable with `--no-summaries`.
 - **Embed & store:** sentence-transformers (default `all-MiniLM-L6-v2`) and ChromaDB at `data/chroma/` (collection `medicare_rag`). Only new or changed chunks (by content hash) are re-embedded and upserted.
 - Use `--skip-index` to run only extract and chunk (no embedding or vector store).
 
@@ -65,7 +66,7 @@ python scripts/ingest_all.py [--source iom|mcd|codes|all] [--force] [--skip-inde
 python scripts/query.py [--filter-source iom|mcd|codes] [--filter-manual 100-02] [--filter-jurisdiction JL] [-k 8]
 ```
 
-- Retrieves top-k chunks by similarity, then generates an answer with the local LLM and prints cited sources. With `pip install -e ".[dev]"` (which adds `rank-bm25`), the default retriever is **hybrid** (semantic + BM25, cross-source query expansion, source diversification); otherwise the LCD-aware semantic retriever is used.
+- Retrieves top-k chunks by similarity, then generates an answer with the local LLM and prints cited sources. With `pip install -e ".[hybrid]"` (or `pip install -e ".[dev]"`, both of which add `rank-bm25`), the default retriever is **hybrid** (semantic + BM25 via Reciprocal Rank Fusion, cross-source query expansion, source diversification, topic-summary boosting). Without `rank-bm25`, the LCD-aware semantic retriever is used instead.
 - **Env:** `LOCAL_LLM_MODEL`, `LOCAL_LLM_DEVICE` (e.g. `cpu` or `auto`), `LOCAL_LLM_MAX_NEW_TOKENS`, `LOCAL_LLM_REPETITION_PENALTY`. Use `CUDA_VISIBLE_DEVICES=""` for CPU-only.
 
 ### 4. Validate and evaluate
@@ -309,7 +310,13 @@ Copy `.env.example` to `.env` and override as needed:
 | `ICD10_CM_ZIP_URL` | Optional; for ICD-10-CM code download |
 | `DOWNLOAD_TIMEOUT` | HTTP timeout in seconds for downloads (default: 60) |
 | `CSV_FIELD_SIZE_LIMIT` | Max CSV field size in bytes for MCD ingestion (default: 10 MB). Increase if very large policy fields are truncated. |
-| `CHUNK_SIZE`, `CHUNK_OVERLAP` | Text splitter defaults (1000 and 200). Optional tuning. |
+| `CHUNK_SIZE`, `CHUNK_OVERLAP` | Standard text splitter settings (1000 / 200). |
+| `LCD_CHUNK_SIZE`, `LCD_CHUNK_OVERLAP` | MCD/LCD-specific chunking (1500 / 300). Larger to preserve policy context. |
+| `LCD_RETRIEVAL_K` | Higher k for LCD/coverage-determination queries (default: 12). |
+| `ENABLE_TOPIC_SUMMARIES` | Generate topic-cluster and document-level summaries at ingest time (default: `1`). |
+| `HYBRID_SEMANTIC_WEIGHT`, `HYBRID_KEYWORD_WEIGHT` | Fusion weights for hybrid retriever (0.6 / 0.4). |
+| `RRF_K` | Reciprocal Rank Fusion smoothing parameter (default: 60). |
+| `CROSS_SOURCE_MIN_PER_SOURCE` | Minimum docs per source type in diversified results (default: 2). |
 
 ## Testing
 
@@ -324,8 +331,12 @@ pytest tests/ -v
 - **Download:** `tests/test_download.py` — mocked HTTP, idempotency, zip-slip and URL sanitization.
 - **Ingest:** `tests/test_ingest.py` — extraction and chunking (including enrichment integration).
 - **Enrichment:** `tests/test_enrich.py` — HCPCS/ICD-10-CM semantic enrichment (category labels, synonyms, edge cases).
+- **Clustering:** `tests/test_cluster.py` — topic definition loading, assignment, clustering, and tagging.
+- **Summarization:** `tests/test_summarize.py` — document-level and topic-cluster summary generation.
 - **Index:** `tests/test_index.py` — Chroma and embeddings (skipped when Chroma unavailable, e.g. some Python 3.14+ setups).
-- **Query:** `tests/test_query.py` — retriever and RAG chain.
+- **Query:** `tests/test_query.py` — LCD query detection, query expansion, `LCDAwareRetriever`.
+- **Hybrid retrieval:** `tests/test_hybrid.py` — BM25 index, RRF fusion, source diversification, `HybridRetriever`.
+- **Summary boosting:** `tests/test_retriever_boost.py` — topic-summary injection and boosting in retrieval results.
 - **Validation/eval:** `tests/test_search_validation.py` — validation and eval question schema.
 - **UI helpers:** `tests/test_app.py` — Streamlit app helpers (requires `.[ui]`).
 
@@ -339,9 +350,14 @@ No network or real downloads needed for the core suite; mocks are used for HTTP 
 
 ## Project layout
 
-- **`src/medicare_rag/`** — Main package: `config`, `download/`, `ingest/` (including `enrich.py` for semantic enrichment), `index/`, `query/`.
+- **`src/medicare_rag/`** — Main package:
+  - `config.py` — centralized configuration.
+  - `download/` — IOM, MCD, and HCPCS/ICD-10-CM downloaders.
+  - `ingest/` — extraction (`extract.py`), enrichment (`enrich.py`), chunking (`chunk.py`), topic clustering (`cluster.py`), and summarization (`summarize.py`).
+  - `index/` — embedding (`embed.py`) and ChromaDB vector store (`store.py`).
+  - `query/` — LCD-aware retriever (`retriever.py`), hybrid retriever (`hybrid.py`), cross-source query expansion (`expand.py`), and RAG chain (`chain.py`).
 - **`scripts/`** — CLI: `download_all.py`, `ingest_all.py`, `validate_and_eval.py`, `query.py`, `run_rag_eval.py`, `eval_questions.json`.
-- **`tests/`** — Pytest suite.
+- **`tests/`** — Pytest suite (see Testing section).
 - **`data/`** — Runtime data (gitignored): `raw/`, `processed/`, `chroma/`.
 
 See **AGENTS.md** for detailed layout, conventions, and patterns.

@@ -14,6 +14,18 @@ src/medicare_rag/           # Main package (installed as editable via `pip insta
   __init__.py
   config.py                 # Paths, env config (DATA_DIR, models, batch sizes, chunking, hybrid/RRF tuning); safe int/float parsing; loads .env
   download/                 # Phase 1: download IOM manuals, MCD bulk data, HCPCS/ICD codes
+    iom.py                  #   IOM chapter PDF scraper
+    mcd.py                  #   MCD bulk ZIP downloader
+    codes.py                #   HCPCS + ICD-10-CM code file downloader
+    _manifest.py            #   Manifest writing and SHA-256 hashing
+    _utils.py               #   URL sanitization, stream_download helper, DOWNLOAD_TIMEOUT (from config)
+  ingest/                   # Phase 2: text extraction, enrichment, chunking, and summarization
+    __init__.py             #   SourceKind type (imported by extract, chunk)
+    extract.py              #   PDF/text extraction (pdfplumber, optional unstructured fallback); defusedxml for XML when available
+    enrich.py               #   HCPCS/ICD-10 semantic enrichment (category labels, synonyms, related terms)
+    chunk.py                #   LangChain text splitters (uses CHUNK_SIZE, CHUNK_OVERLAP from config); orchestrates summary generation
+    cluster.py              #   Topic clustering via keyword patterns (loads topic_definitions.json)
+    summarize.py            #   Extractive document-level and topic-cluster summaries (TF-IDF scoring, no LLM)
     __init__.py              #   Re-exports download_iom, download_mcd, download_codes
     iom.py                   #   IOM chapter PDF scraper
     mcd.py                   #   MCD bulk ZIP downloader
@@ -32,6 +44,10 @@ src/medicare_rag/           # Main package (installed as editable via `pip insta
     embed.py                 #   sentence-transformers embeddings
     store.py                 #   ChromaDB upsert, incremental by content hash; get_raw_collection helper
   query/                    # Phase 4: retrieval and RAG chain
+    retriever.py            #   LCD-aware retriever, topic-summary boosting
+    expand.py               #   Cross-source query expansion and Medicare domain synonyms
+    hybrid.py               #   Hybrid semantic+BM25 retriever with RRF and source diversification
+    chain.py                #   Local LLM (HuggingFace) RAG chain
     __init__.py              #   Imports expand and hybrid submodules
     retriever.py             #   LCDAwareRetriever with LCD query expansion, topic summary boosting/injection, and get_retriever factory
     chain.py                 #   Local LLM (HuggingFace) RAG chain
@@ -46,6 +62,18 @@ scripts/                    # CLI entry points
   run_rag_eval.py            #   Full-RAG eval report generation
   eval_questions.json        #   Eval question set (expected keywords/sources)
 tests/                      # Unit tests (pytest; install with pip install -e ".[dev]")
+  test_config.py            #   Safe env int/float parsing
+  test_download.py          #   Mocked HTTP, idempotency, zip-slip and URL sanitization
+  test_ingest.py            #   Extraction and chunking tests (including enrichment integration)
+  test_enrich.py            #   HCPCS/ICD-10-CM semantic enrichment tests
+  test_cluster.py           #   Topic clustering (definitions, assignment, tagging)
+  test_summarize.py         #   Document-level and topic-cluster summary generation
+  test_index.py             #   Chroma/embedding and get_raw_collection tests (skipped when Chroma unavailable)
+  test_query.py             #   LCD query detection, expansion, LCDAwareRetriever
+  test_hybrid.py            #   BM25 index, RRF fusion, source diversification, HybridRetriever
+  test_retriever_boost.py   #   Topic-summary injection and boosting
+  test_search_validation.py #   Search/validation tests
+  test_app.py               #   Streamlit app helpers (escape, filters; requires .[ui])
   conftest.py                #   Shared fixtures (autouse: reset BM25 index after each test)
   test_config.py             #   Safe env int/float parsing
   test_download.py           #   Mocked HTTP, idempotency, zip-slip and URL sanitization
@@ -99,6 +127,7 @@ Tests use `unittest.mock` to mock HTTP calls and external dependencies. No netwo
 
 ## Key Conventions
 
+- **Configuration** is centralized in `src/medicare_rag/config.py`. It reads from environment variables (via `python-dotenv`) with sensible defaults. Numeric settings (e.g. `LOCAL_LLM_MAX_NEW_TOKENS`, `CHUNK_SIZE`) use safe parsing: invalid values log a warning and fall back to the default. Override paths with `DATA_DIR`, model settings with `EMBEDDING_MODEL`, `LOCAL_LLM_MODEL`; tuning with `DOWNLOAD_TIMEOUT`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `LCD_CHUNK_SIZE`, `LCD_CHUNK_OVERLAP`, `LCD_RETRIEVAL_K`, `HYBRID_SEMANTIC_WEIGHT`, `HYBRID_KEYWORD_WEIGHT`, `RRF_K`, `CROSS_SOURCE_MIN_PER_SOURCE`, `ENABLE_TOPIC_SUMMARIES`, `CHROMA_UPSERT_BATCH_SIZE`, `GET_META_BATCH_SIZE`. See `.env.example` for the full list.
 - **Configuration** is centralized in `src/medicare_rag/config.py`. It reads from environment variables (via `python-dotenv`) with sensible defaults. Numeric settings use safe parsing (`_safe_int`, `_safe_float`, `_safe_positive_int`, `_safe_float_positive`): invalid values log a warning and fall back to the default. Key settings:
   - Paths: `DATA_DIR`, `RAW_DIR`, `PROCESSED_DIR`, `CHROMA_DIR`
   - Models: `EMBEDDING_MODEL`, `LOCAL_LLM_MODEL`, `LOCAL_LLM_DEVICE`, `LOCAL_LLM_MAX_NEW_TOKENS`, `LOCAL_LLM_REPETITION_PENALTY`
@@ -118,7 +147,9 @@ Tests use `unittest.mock` to mock HTTP calls and external dependencies. No netwo
 - Embedding model default: `sentence-transformers/all-MiniLM-L6-v2`
 - LLM default: `TinyLlama/TinyLlama-1.1B-Chat-v1.0` (configurable via env)
 - Tests follow the pattern: fixture creates `tmp_path`, mocks are applied via `unittest.mock.patch`, assertions verify file creation and manifest contents
-- The Streamlit app and index store use `get_raw_collection(store)` from `index.store` to access the Chroma wrapper's underlying collection for batched metadata and dimension checks; this wraps the private `_collection` API and may need updating if langchain-chroma changes
+- The Streamlit app and index store use `get_raw_collection(store)` from `index.store` to access the Chroma wrapper's underlying collection for batched metadata and dimension checks; this wraps the private `_collection` API and may need updating if langchain-chroma changes.
+- The hybrid retriever (`query/hybrid.py`) maintains a module-level singleton `BM25Index` that is lazily built from the Chroma collection and checked for staleness by document count. Use `reset_bm25_index()` in tests to avoid state leaking between test cases.
+- Topic definitions for clustering are loaded from `DATA_DIR/topic_definitions.json` if present, otherwise from the package default at `src/medicare_rag/data/topic_definitions.json`. Add new topics by extending the JSON file.
 
 ## Retrieval Architecture
 

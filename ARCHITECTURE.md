@@ -190,25 +190,81 @@ flowchart LR
 
 **Chunk ID scheme:** `{doc_id}_{chunk_index}` for chunked documents, or plain `{doc_id}` for single-chunk code documents.
 
-### Phase 4: Query & RAG
+### Phase 2b: Topic Clustering & Summarization
 
-The retrieval and generation layer connects ChromaDB similarity search to a local LLM.
+After chunking, the pipeline optionally generates document-level and topic-cluster summaries that act as stable "anchor" chunks in the vector store, improving retrieval consistency across rephrasings.
 
 ```mermaid
 flowchart LR
-  Q["User Question"]
-  Retriever["Retriever\n(Chroma top-k=8,\nmetadata filters)"]
-  Context["Context Builder\n[1] chunk_1\n[2] chunk_2 ... [k] chunk_k"]
-  LLM["LLM (TinyLlama)\nSystem: Medicare RCM assistant\nHuman: context + question"]
-  Answer["Answer with [1][2]...\ncitations + source docs"]
+  Chunks["Chunked Documents"]
+  Cluster["cluster.py\nAssign topic labels\nvia keyword patterns"]
+  Summarize["summarize.py\nExtract top sentences\n(TF-IDF scoring)"]
+  Tagged["Tagged Chunks\n(topic_clusters metadata)"]
+  Summaries["Summary Documents\n(document_summary,\ntopic_summary)"]
 
-  Q --> Retriever --> Context --> LLM --> Answer
+  Chunks --> Cluster --> Tagged
+  Chunks --> Summarize --> Summaries
 ```
 
-**Retriever:** `langchain_chroma.Chroma.as_retriever()` with configurable `k` (default 8) and optional metadata filter (Chroma `where` clause). Supports filtering by `source`, `manual`, `jurisdiction`, and combinations via `$and`.
+**Topic clustering (`cluster.py`):**
+- Each topic is defined by a set of regex keyword patterns (loaded from `topic_definitions.json` or package default).
+- A chunk may belong to multiple topics (e.g. "cardiac rehab billing codes" matches both `cardiac_rehab` and `billing`).
+- Assigns `topic_clusters` metadata to each document for downstream boosting.
 
-**RAG chain:**
-1. Retrieve top-k chunks by cosine similarity
+**Extractive summarization (`summarize.py`):**
+- **Document-level summaries** — for long source documents, extracts the most important sentences using TF-IDF-like scoring with positional bonuses. Produces a `document_summary` Document that consolidates the key content.
+- **Topic-cluster summaries** — merges top sentences from all chunks in a topic cluster into a single `topic_summary` Document that spans multiple source types.
+- No external LLM or API is used at ingest time; summarization is purely extractive.
+
+Controlled by `ENABLE_TOPIC_SUMMARIES` (default on), `MAX_DOC_SUMMARY_SENTENCES`, `MAX_TOPIC_SUMMARY_SENTENCES`, `MIN_TOPIC_CLUSTER_CHUNKS`, and `MIN_DOC_TEXT_LENGTH_FOR_SUMMARY`.
+
+### Phase 4: Query & RAG
+
+The retrieval layer provides multiple strategies that are composed at query time.
+
+```mermaid
+flowchart TB
+  Q["User Question"]
+
+  subgraph Retriever["Retrieval Pipeline"]
+    direction TB
+    LCD{"LCD query?"}
+    Expand["Cross-source expansion\n(expand.py)"]
+    LCDExpand["LCD query expansion\n(retriever.py)"]
+    Semantic["Semantic search\n(Chroma cosine similarity)"]
+    BM25["BM25 keyword search\n(rank-bm25)"]
+    RRF["Reciprocal Rank Fusion\n(hybrid.py)"]
+    TopicBoost["Topic summary boost\n(retriever.py)"]
+    Diversify["Source diversification\n(hybrid.py)"]
+  end
+
+  Context["Context Builder\n[1] chunk_1 … [k] chunk_k"]
+  LLM["LLM (TinyLlama)\nprompt + context + question"]
+  Answer["Answer with [1][2]…\ncitations + source docs"]
+
+  Q --> LCD
+  LCD -->|Yes| LCDExpand --> Semantic
+  LCD -->|No| Expand --> Semantic
+  Expand --> BM25
+  LCDExpand --> BM25
+  Semantic --> RRF
+  BM25 --> RRF
+  RRF --> TopicBoost --> Diversify
+  Diversify --> Context --> LLM --> Answer
+```
+
+**Retriever stack (from outermost to innermost):**
+
+| Layer | Module | Purpose |
+|-------|--------|---------|
+| **Hybrid retriever** | `hybrid.py` | Default when `rank-bm25` is installed. Fuses semantic + BM25 results via RRF, applies cross-source diversification. |
+| **LCD-aware retriever** | `retriever.py` | Fallback when BM25 is unavailable. Detects LCD/coverage queries and runs multi-query retrieval with MCD source filters. |
+| **Cross-source expansion** | `expand.py` | Generates query variants targeting each source's vocabulary (IOM policy terms, MCD coverage terms, code identifiers). Adds Medicare domain synonyms. |
+| **Topic summary boost** | `retriever.py` | Injects and promotes topic/document summary chunks that match the query's detected topics, ensuring stable anchor docs appear in results. |
+| **Source diversification** | `hybrid.py` | Re-ranks results so that each relevant source type has minimum representation in the top-k. |
+
+**RAG chain (`chain.py`):**
+1. Retrieve top-k chunks via the retriever stack
 2. Format context as numbered items: `[1] chunk_content`, `[2] chunk_content`, ...
 3. Build a `ChatPromptTemplate` with system + human messages
 4. Invoke local LLM via `HuggingFacePipeline` → `ChatHuggingFace`
@@ -243,7 +299,9 @@ flowchart TB
       IInit["__init__.py — SourceKind type"]
       Extract["extract.py — Multi-format extraction (PDF, CSV, fixed-width, XML; defusedxml when available)"]
       Enrich["enrich.py — HCPCS/ICD-10 semantic enrichment (category labels, synonyms, related terms)"]
-      Chunk["chunk.py — LangChain text splitter with source-aware chunking"]
+      Chunk["chunk.py — LangChain text splitter with source-aware chunking + summary orchestration"]
+      Cluster["cluster.py — Topic clustering via keyword patterns"]
+      Summarize["summarize.py — Extractive document and topic-cluster summaries"]
     end
 
     subgraph Index["index/ — Phase 3"]
@@ -254,7 +312,9 @@ flowchart TB
 
     subgraph Query["query/ — Phase 4"]
       QInit["__init__.py"]
-      Retriever["retriever.py — Chroma-backed LangChain retriever"]
+      Retriever["retriever.py — LCD-aware retriever, topic-summary boosting"]
+      Expand["expand.py — Cross-source query expansion, domain synonyms"]
+      Hybrid["hybrid.py — Hybrid semantic+BM25 retriever, RRF, source diversification"]
       Chain["chain.py — RAG chain: prompt + local LLM + answer generation"]
     end
   end
@@ -277,8 +337,22 @@ All configuration is centralized in a single module that loads `.env` via `pytho
 | `LOCAL_LLM_MAX_NEW_TOKENS` | `512` | `LOCAL_LLM_MAX_NEW_TOKENS` (invalid → default + warning) |
 | `LOCAL_LLM_REPETITION_PENALTY` | `1.05` | `LOCAL_LLM_REPETITION_PENALTY` (invalid → default + warning) |
 | `DOWNLOAD_TIMEOUT` | `60.0` | `DOWNLOAD_TIMEOUT` |
+| `CSV_FIELD_SIZE_LIMIT` | `10 MB` | `CSV_FIELD_SIZE_LIMIT` |
 | `CHUNK_SIZE` | `1000` | `CHUNK_SIZE` |
 | `CHUNK_OVERLAP` | `200` | `CHUNK_OVERLAP` |
+| `LCD_CHUNK_SIZE` | `1500` | `LCD_CHUNK_SIZE` |
+| `LCD_CHUNK_OVERLAP` | `300` | `LCD_CHUNK_OVERLAP` |
+| `LCD_RETRIEVAL_K` | `12` | `LCD_RETRIEVAL_K` |
+| `ENABLE_TOPIC_SUMMARIES` | `true` | `ENABLE_TOPIC_SUMMARIES` (`1`/`true`/`yes`) |
+| `MAX_DOC_SUMMARY_SENTENCES` | `8` | `MAX_DOC_SUMMARY_SENTENCES` |
+| `MAX_TOPIC_SUMMARY_SENTENCES` | `10` | `MAX_TOPIC_SUMMARY_SENTENCES` |
+| `MIN_TOPIC_CLUSTER_CHUNKS` | `2` | `MIN_TOPIC_CLUSTER_CHUNKS` |
+| `MIN_DOC_TEXT_LENGTH_FOR_SUMMARY` | `200` | `MIN_DOC_TEXT_LENGTH_FOR_SUMMARY` |
+| `HYBRID_SEMANTIC_WEIGHT` | `0.6` | `HYBRID_SEMANTIC_WEIGHT` |
+| `HYBRID_KEYWORD_WEIGHT` | `0.4` | `HYBRID_KEYWORD_WEIGHT` |
+| `RRF_K` | `60` | `RRF_K` |
+| `CROSS_SOURCE_MIN_PER_SOURCE` | `2` | `CROSS_SOURCE_MIN_PER_SOURCE` |
+| `MAX_QUERY_VARIANTS` | `6` | `MAX_QUERY_VARIANTS` |
 | `CHROMA_UPSERT_BATCH_SIZE` | `5000` | `CHROMA_UPSERT_BATCH_SIZE` |
 | `GET_META_BATCH_SIZE` | `500` | `GET_META_BATCH_SIZE` |
 
@@ -287,7 +361,7 @@ All configuration is centralized in a single module that loads `.env` via `pytho
 | Script | Purpose | Key Arguments |
 |--------|---------|---------------|
 | `scripts/download_all.py` | Run Phase 1 downloads | `--source`, `--force` |
-| `scripts/ingest_all.py` | Run Phases 2-3 (extract, chunk, embed, store) | `--source`, `--force`, `--skip-extract`, `--skip-index` |
+| `scripts/ingest_all.py` | Run Phases 2-3 (extract, chunk, embed, store) | `--source`, `--force`, `--skip-extract`, `--skip-index`, `--no-summaries` |
 | `scripts/query.py` | Interactive RAG REPL | `--filter-source`, `--filter-manual`, `--filter-jurisdiction`, `-k` |
 | `scripts/validate_and_eval.py` | Index validation + retrieval evaluation | `--validate-only`, `--eval-only`, `-k`, `--k-values`, `--json`, `--report` |
 | `scripts/run_rag_eval.py` | Full RAG eval (LLM answers) report | `--eval-file`, `--out`, `-k` |
@@ -329,6 +403,18 @@ Every chunk carries structured metadata (`source`, `manual`, `chapter`, `jurisdi
 ### Zip-slip protection
 
 All ZIP extraction (MCD bulk data, nested CSVs, ICD-10-CM) validates that extracted file paths resolve within the target directory using `Path.resolve()` and `is_relative_to()`, preventing directory traversal attacks.
+
+### Hybrid retrieval (semantic + BM25)
+
+Pure semantic search misses queries that depend on exact term matching (e.g., specific LCD numbers, HCPCS codes, contractor names). The hybrid retriever runs both semantic and BM25 keyword search in parallel, then fuses the ranked lists via Reciprocal Rank Fusion (RRF). The BM25 index is built lazily from the Chroma collection (thread-safe, stale-checked by document count) and requires the optional `rank-bm25` dependency. When unavailable, the system falls back to the LCD-aware semantic-only retriever.
+
+### Cross-source query expansion
+
+Medicare queries often span IOM policy, MCD coverage determinations, and HCPCS/ICD codes. The `expand.py` module detects which source types are relevant to a query (via regex pattern scoring) and generates additional query variants that target each source's vocabulary, plus Medicare domain synonym expansions. This improves recall for cross-source questions without requiring the user to know the source taxonomy.
+
+### Topic clustering and summary generation
+
+Fragmented content (e.g., cardiac rehabilitation spread across multiple IOM chapters, MCD LCDs, and HCPCS codes) causes retrieval inconsistency — rephrased queries may retrieve different chunks. Topic clustering groups chunks by clinical/policy topic via keyword patterns, and extractive summarization generates consolidated "anchor" documents for each topic and each long source document. These summaries are indexed alongside regular chunks and boosted during retrieval, providing stable entry points regardless of query phrasing.
 
 ## Evaluation Framework
 
@@ -394,8 +480,12 @@ Tests live in `tests/` and run via `pytest`. All external dependencies (HTTP, fi
 | `test_download.py` | Phase 1: downloaders | Mocked HTTP responses, manifest verification, zip-slip protection, idempotency checks |
 | `test_ingest.py` | Phase 2: extraction + chunking | Fixtures with sample PDFs/CSVs in `tmp_path`, metadata schema validation, enrichment integration |
 | `test_enrich.py` | Phase 2: semantic enrichment | HCPCS prefix mapping (15 tests), ICD-10-CM chapter ranges (17 tests), edge cases, wrapper functions |
+| `test_cluster.py` | Phase 2: topic clustering | Topic definition loading, `assign_topics`, `cluster_documents`, `tag_documents_with_topics` |
+| `test_summarize.py` | Phase 2: summarization | Document-level and topic-cluster summary generation, TF-IDF scoring, `generate_all_summaries` |
 | `test_index.py` | Phase 3: embeddings + store | Mocked embeddings, ChromaDB in-memory; skipped when ChromaDB unavailable |
-| `test_query.py` | Phase 4: retriever + chain | Mocked retriever and LLM, prompt template validation |
+| `test_query.py` | Phase 4: retriever + chain | LCD query detection, query expansion, `LCDAwareRetriever`, mocked store |
+| `test_hybrid.py` | Phase 4: hybrid retriever | BM25 index, RRF fusion, source diversification, `HybridRetriever` with mocked store |
+| `test_retriever_boost.py` | Phase 4: summary boosting | `boost_summaries`, `inject_topic_summaries`, `apply_topic_summary_boost` |
 | `test_search_validation.py` | Validation + eval | Eval question schema checks, metric computation |
 | `test_app.py` | Streamlit UI helpers | Metadata filter building, result rendering (requires `.[ui]`) |
 

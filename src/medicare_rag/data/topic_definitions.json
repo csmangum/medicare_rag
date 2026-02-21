@@ -1,0 +1,172 @@
+[
+  {
+    "name": "cardiac_rehab",
+    "label": "Cardiac Rehabilitation",
+    "patterns": [
+      "cardiac\\s*rehab",
+      "heart\\s*rehab",
+      "cardiovascular\\s*rehab",
+      "\\bICR\\b.*program"
+    ],
+    "summary_prefix": "Cardiac Rehabilitation: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "wound_care",
+    "label": "Wound Care",
+    "patterns": [
+      "wound\\s*care",
+      "wound\\s*management",
+      "negative\\s*pressure\\s*wound",
+      "\\bNPWT\\b",
+      "wound\\s*vac",
+      "wound\\s*therapy",
+      "debridement"
+    ],
+    "summary_prefix": "Wound Care: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "hyperbaric_oxygen",
+    "label": "Hyperbaric Oxygen Therapy",
+    "patterns": [
+      "hyperbaric\\s*oxygen",
+      "\\bHBOT\\b"
+    ],
+    "summary_prefix": "Hyperbaric Oxygen Therapy: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "dme",
+    "label": "Durable Medical Equipment",
+    "patterns": [
+      "durable\\s*medical\\s*equipment",
+      "\\bDME\\b",
+      "wheelchair",
+      "hospital\\s*bed",
+      "oxygen\\s*equipment",
+      "\\bCPAP\\b",
+      "\\bBiPAP\\b",
+      "walker",
+      "nebulizer"
+    ],
+    "summary_prefix": "Durable Medical Equipment: ",
+    "min_pattern_matches": 2
+  },
+  {
+    "name": "physical_therapy",
+    "label": "Physical Therapy",
+    "patterns": [
+      "physical\\s*therapy",
+      "\\bPT\\b.*rehab",
+      "outpatient\\s*rehabilitation",
+      "occupational\\s*therapy",
+      "speech.language\\s*pathology"
+    ],
+    "summary_prefix": "Physical Therapy: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "imaging",
+    "label": "Diagnostic Imaging",
+    "patterns": [
+      "\\bMRI\\b",
+      "\\bCT\\s*scan",
+      "diagnostic\\s*imaging",
+      "advanced\\s*imaging",
+      "ultrasound",
+      "X-ray",
+      "PET\\s*scan"
+    ],
+    "summary_prefix": "Diagnostic Imaging: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "home_health",
+    "label": "Home Health",
+    "patterns": [
+      "home\\s*health",
+      "\\bHHA\\b",
+      "skilled\\s*nursing.*home",
+      "home\\s*care"
+    ],
+    "summary_prefix": "Home Health: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "hospice",
+    "label": "Hospice and Palliative Care",
+    "patterns": [
+      "hospice",
+      "palliative\\s*care",
+      "terminal\\s*illness",
+      "end.of.life"
+    ],
+    "summary_prefix": "Hospice: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "dialysis",
+    "label": "Dialysis and ESRD",
+    "patterns": [
+      "dialysis",
+      "\\bESRD\\b",
+      "end.stage\\s*renal",
+      "hemodialysis",
+      "peritoneal\\s*dialysis"
+    ],
+    "summary_prefix": "Dialysis: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "chemotherapy",
+    "label": "Chemotherapy and Oncology",
+    "patterns": [
+      "chemotherapy",
+      "oncology",
+      "cancer\\s*treatment",
+      "antineoplastic",
+      "radiation\\s*therapy"
+    ],
+    "summary_prefix": "Chemotherapy: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "mental_health",
+    "label": "Mental and Behavioral Health",
+    "patterns": [
+      "mental\\s*health",
+      "behavioral\\s*health",
+      "psychiatric",
+      "psychological\\s*services",
+      "substance\\s*abuse\\s*treatment"
+    ],
+    "summary_prefix": "Mental Health: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "ambulance",
+    "label": "Ambulance and Transport",
+    "patterns": [
+      "\\bambulance\\b",
+      "emergency\\s*(?:medical\\s*)?transport",
+      "\\bBLS\\b.*(?:ambulance|transport|paramedic)",
+      "\\bALS\\b.*(?:ambulance|transport|paramedic)",
+      "non.emergency\\s*transport"
+    ],
+    "summary_prefix": "Ambulance: ",
+    "min_pattern_matches": 1
+  },
+  {
+    "name": "infusion_therapy",
+    "label": "Infusion Therapy",
+    "patterns": [
+      "infusion\\s*therapy",
+      "\\bIV\\b.*infusion",
+      "drug\\s*administration.*infusion",
+      "infusion.*drug\\s*administration"
+    ],
+    "summary_prefix": "Infusion Therapy: ",
+    "min_pattern_matches": 1
+  }
+]

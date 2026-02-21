@@ -1,4 +1,8 @@
-"""ChromaDB vector store (Phase 3)."""
+"""ChromaDB vector store operations (Phase 3).
+
+Provides incremental upsert by content hash so that unchanged chunks are
+not re-embedded on repeated ingestion runs.
+"""
 import hashlib
 from typing import TYPE_CHECKING
 
@@ -29,8 +33,8 @@ def get_raw_collection(store: "Chroma"):
     return coll
 
 
-# Chroma allows str, int, float, bool in metadata
 def _sanitize_metadata(meta: dict) -> dict:
+    """Coerce metadata values to ChromaDB-compatible types (str/int/float/bool), dropping None."""
     out = {}
     for k, v in meta.items():
         if v is None:
@@ -43,6 +47,7 @@ def _sanitize_metadata(meta: dict) -> dict:
 
 
 def _chunk_id(doc: Document) -> str:
+    """Stable identifier for a chunk: ``{doc_id}_{chunk_index}`` or plain ``{doc_id}`` for single-chunk docs."""
     doc_id = doc.metadata.get("doc_id", "unknown")
     if "chunk_index" in doc.metadata:
         return f"{doc_id}_{doc.metadata['chunk_index']}"
@@ -50,6 +55,7 @@ def _chunk_id(doc: Document) -> str:
 
 
 def _content_hash(doc: Document) -> str:
+    """SHA-256 of ``page_content + doc_id + chunk_index`` for change detection."""
     doc_id = doc.metadata.get("doc_id", "unknown")
     chunk_index = doc.metadata.get("chunk_index", 0)
     payload = f"{doc.page_content}\x00{doc_id}\x00{chunk_index}"

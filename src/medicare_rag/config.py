@@ -1,6 +1,22 @@
-"""Paths and env config. Load .env via python-dotenv.
+"""Centralized configuration for the Medicare RAG pipeline.
 
-Default DATA_DIR is best when running from repo root or with an editable install.
+Reads settings from environment variables (via python-dotenv) with sensible
+defaults.  Numeric values use safe parsers that log a warning and fall back
+to the default when the env value is invalid or out of range.
+
+Exports:
+    Paths      — DATA_DIR, RAW_DIR, PROCESSED_DIR, CHROMA_DIR
+    Embedding  — EMBEDDING_MODEL, COLLECTION_NAME
+    LLM        — LOCAL_LLM_MODEL, LOCAL_LLM_DEVICE, LOCAL_LLM_MAX_NEW_TOKENS,
+                  LOCAL_LLM_REPETITION_PENALTY
+    Chunking   — CHUNK_SIZE, CHUNK_OVERLAP, LCD_CHUNK_SIZE, LCD_CHUNK_OVERLAP
+    Indexing   — CHROMA_UPSERT_BATCH_SIZE, GET_META_BATCH_SIZE
+    Retrieval  — LCD_RETRIEVAL_K, HYBRID_SEMANTIC_WEIGHT, HYBRID_KEYWORD_WEIGHT,
+                  RRF_K, CROSS_SOURCE_MIN_PER_SOURCE, MAX_QUERY_VARIANTS
+    Summary    — ENABLE_TOPIC_SUMMARIES, MAX_DOC_SUMMARY_SENTENCES,
+                  MAX_TOPIC_SUMMARY_SENTENCES, MIN_TOPIC_CLUSTER_CHUNKS,
+                  MIN_DOC_TEXT_LENGTH_FOR_SUMMARY
+    Download   — DOWNLOAD_TIMEOUT, CSV_FIELD_SIZE_LIMIT, ICD10_CM_ZIP_URL
 """
 import logging
 import math
@@ -15,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def _safe_int(key: str, default: int) -> int:
+    """Parse *key* from the environment as an int, returning *default* on failure."""
     raw = os.environ.get(key)
     if raw is None:
         return default
@@ -26,6 +43,7 @@ def _safe_int(key: str, default: int) -> int:
 
 
 def _safe_float(key: str, default: float) -> float:
+    """Parse *key* from the environment as a float, returning *default* on failure or non-finite values."""
     raw = os.environ.get(key)
     if raw is None:
         return default
