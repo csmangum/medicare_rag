@@ -116,6 +116,7 @@ def _meta_schema(
     jurisdiction: str | None = None,
     **extra: str | None,
 ) -> dict:
+    """Build a metadata dict for a document, dropping None-valued extras."""
     meta = {
         "source": source,
         "manual": manual,
@@ -130,6 +131,7 @@ def _meta_schema(
 
 
 def _write_doc(processed_dir: Path, subdir: str, doc_id: str, text: str, meta: dict) -> tuple[Path, Path]:
+    """Write a .txt and .meta.json pair under *processed_dir/subdir*. Returns (txt_path, meta_path)."""
     out_dir = processed_dir / subdir
     out_dir.mkdir(parents=True, exist_ok=True)
     txt_path = out_dir / f"{doc_id}.txt"
@@ -142,6 +144,7 @@ def _write_doc(processed_dir: Path, subdir: str, doc_id: str, text: str, meta: d
 # --- IOM ---
 
 def _should_skip_iom_pdf(name: str) -> bool:
+    """Return True for IOM PDFs that are metadata/crosswalk files, not chapter content."""
     name_lower = name.lower()
     if "crosswalk" in name_lower or name_lower == "broker-help-desks.pdf":
         return True
@@ -192,6 +195,7 @@ def _extract_pdf_page_unstructured(pdf_path: Path) -> str:
 
 
 def _extract_iom_pdf(pdf_path: Path, manual_id: str, chapter: str | None) -> str:
+    """Extract text from an IOM chapter PDF, falling back to unstructured for scanned pages."""
     parts = []
     num_pages = 0
     with pdfplumber.open(pdf_path) as pdf:
@@ -259,6 +263,7 @@ def extract_iom(processed_dir: Path, raw_dir: Path, *, force: bool = False) -> l
 # --- MCD ---
 
 def _html_to_text(html: str) -> str:
+    """Convert HTML to plain text, preserving table rows as pipe-delimited lines."""
     if not html or not html.strip():
         return ""
     soup = BeautifulSoup(html, "html.parser")
@@ -448,6 +453,7 @@ def _parse_hcpcs_line(line: str) -> dict | None:
 
 
 def _format_date_yyyymmdd(s: str) -> str | None:
+    """Convert a YYYYMMDD string to YYYY-MM-DD, or None if malformed."""
     if not s or len(s) != 8:
         return None
     try:
