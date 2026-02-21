@@ -616,5 +616,126 @@
     "expected_sources": ["iom", "mcd"],
     "expect_summary_in_results": true,
     "description": "Expects a topic or document summary in top-k for hyperbaric oxygen"
+  },
+  {
+    "id": "hospice_coverage",
+    "query": "What are the Medicare hospice benefit eligibility and coverage requirements?",
+    "category": "policy_coverage",
+    "difficulty": "medium",
+    "expected_keywords": ["hospice", "eligibility", "coverage", "terminal"],
+    "expected_sources": ["iom"],
+    "description": "Hospice benefit from IOM - topic exists in topic_definitions"
+  },
+  {
+    "id": "dialysis_esrd_coverage",
+    "query": "Medicare coverage for dialysis and end-stage renal disease",
+    "category": "policy_coverage",
+    "difficulty": "medium",
+    "expected_keywords": ["dialysis", "ESRD", "renal"],
+    "expected_sources": ["iom", "mcd"],
+    "description": "Dialysis/ESRD coverage - topic exists in topic_definitions"
+  },
+  {
+    "id": "lcd_chemotherapy",
+    "query": "LCD coverage for chemotherapy and cancer treatment",
+    "category": "lcd_policy",
+    "difficulty": "hard",
+    "expected_keywords": ["chemotherapy", "cancer", "oncology"],
+    "expected_sources": ["mcd"],
+    "description": "Chemotherapy LCD - topic exists in topic_definitions"
+  },
+  {
+    "id": "mental_health_coverage",
+    "query": "What Medicare services cover mental health and behavioral health treatment?",
+    "category": "policy_coverage",
+    "difficulty": "medium",
+    "expected_keywords": ["mental health", "behavioral", "psychiatric"],
+    "expected_sources": ["iom", "mcd"],
+    "description": "Mental health coverage - topic exists in topic_definitions"
+  },
+  {
+    "id": "infusion_therapy_lcd",
+    "query": "Medicare coverage for infusion therapy and IV drug administration",
+    "category": "lcd_policy",
+    "difficulty": "hard",
+    "expected_keywords": ["infusion", "IV", "drug"],
+    "expected_sources": ["mcd"],
+    "description": "Infusion therapy LCD - topic exists in topic_definitions"
+  },
+  {
+    "id": "telehealth_coverage",
+    "query": "Does Medicare cover telehealth and virtual visits?",
+    "category": "policy_coverage",
+    "difficulty": "medium",
+    "expected_keywords": ["telehealth", "virtual", "remote"],
+    "expected_sources": ["iom"],
+    "description": "Telehealth coverage - mentioned in enrich HCPCS categories"
+  },
+  {
+    "id": "summary_dme",
+    "query": "What are the coverage requirements for durable medical equipment under Medicare?",
+    "category": "summary_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["durable medical equipment", "DME", "coverage"],
+    "expected_sources": ["iom", "mcd", "codes"],
+    "expect_summary_in_results": true,
+    "description": "Expects a topic or document summary in top-k for DME"
+  },
+  {
+    "id": "summary_imaging",
+    "query": "When does Medicare cover MRI and CT scans?",
+    "category": "summary_retrieval",
+    "difficulty": "medium",
+    "expected_keywords": ["MRI", "CT", "imaging", "coverage"],
+    "expected_sources": ["iom", "mcd"],
+    "expect_summary_in_results": true,
+    "description": "Expects a topic or document summary in top-k for diagnostic imaging"
+  },
+  {
+    "id": "consistency_hospice_1",
+    "query": "hospice Medicare eligibility and coverage criteria",
+    "category": "consistency",
+    "difficulty": "medium",
+    "expected_keywords": ["hospice", "coverage", "eligibility"],
+    "expected_sources": ["iom"],
+    "consistency_group": "hospice",
+    "description": "Consistency pair 1: keyword-style hospice query"
+  },
+  {
+    "id": "consistency_hospice_2",
+    "query": "Does Medicare pay for hospice care for terminally ill patients?",
+    "category": "consistency",
+    "difficulty": "medium",
+    "expected_keywords": ["hospice", "terminal", "coverage"],
+    "expected_sources": ["iom"],
+    "consistency_group": "hospice",
+    "description": "Consistency pair 2: natural language hospice query"
+  },
+  {
+    "id": "abbrev_esrd",
+    "query": "ESRD dialysis coverage and payment",
+    "category": "abbreviation",
+    "difficulty": "medium",
+    "expected_keywords": ["end-stage renal", "dialysis", "ESRD"],
+    "expected_sources": ["iom", "mcd"],
+    "description": "ESRD abbreviation should resolve to end-stage renal disease"
+  },
+  {
+    "id": "abbrev_ncd",
+    "query": "NCD coverage determination process",
+    "category": "abbreviation",
+    "difficulty": "medium",
+    "expected_keywords": ["national coverage determination", "NCD"],
+    "expected_sources": ["iom", "mcd"],
+    "description": "NCD abbreviation retrieval"
+  },
+  {
+    "id": "observation_status",
+    "query": "What is observation status and how does it differ from inpatient admission?",
+    "category": "policy_coverage",
+    "difficulty": "hard",
+    "expected_keywords": ["observation", "inpatient", "status"],
+    "expected_sources": ["iom"],
+    "description": "Observation vs inpatient stay - common Medicare concept"
   }
 ]
