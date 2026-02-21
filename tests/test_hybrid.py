@@ -4,7 +4,6 @@ import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from langchain_core.documents import Document
 
 from medicare_rag.query.expand import (
@@ -603,7 +602,9 @@ class TestGetRetrieverIntegration:
             retriever = get_retriever(k=10, metadata_filter={"source": "iom"})
 
         assert retriever is mock_factory.return_value
-        mock_factory.assert_called_once_with(k=10, metadata_filter={"source": "iom"})
+        mock_factory.assert_called_once_with(
+            k=10, metadata_filter={"source": "iom"}, embeddings=None, store=None
+        )
 
     def test_get_hybrid_retriever_raises_when_bm25_unavailable(self):
         """When rank-bm25 is missing, get_hybrid_retriever raises so get_retriever can fall back."""

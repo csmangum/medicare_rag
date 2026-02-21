@@ -199,7 +199,7 @@ def inject_topic_summaries(
     metas = result.get("metadatas") or []
 
     injected: list[Document] = []
-    for i, cid in enumerate(returned_ids):
+    for i, _cid in enumerate(returned_ids):
         text = texts[i] if i < len(texts) else ""
         meta = (metas[i] if i < len(metas) else None) or {}
         injected.append(Document(page_content=text or "", metadata=dict(meta)))
@@ -222,7 +222,8 @@ def apply_topic_summary_boost(
     query: str,
     max_k: int,
 ) -> list[Document]:
-    """Run topic detection, inject topic summaries if needed, boost them, return up to max_k docs."""
+    """Run topic detection, inject topic summaries if needed, boost them,
+    return up to max_k docs."""
     query_topics = detect_query_topics(query)
     if query_topics:
         docs = inject_topic_summaries(store, docs, query_topics, max_k)
@@ -336,6 +337,8 @@ class LCDAwareRetriever(BaseRetriever):
 def get_retriever(
     k: int = 8,
     metadata_filter: dict | None = None,
+    embeddings: Any = None,
+    store: Any = None,
 ) -> BaseRetriever:
     """Return a hybrid retriever combining semantic and keyword search.
 
@@ -347,16 +350,23 @@ def get_retriever(
     Uses the same embeddings and persist directory as the index. Optional
     metadata_filter is passed to Chroma's where clause (e.g. {"source": "iom"},
     {"manual": "100-02"}, {"jurisdiction": "JL"}).
+
+    If embeddings and store are provided, they will be reused instead of
+    creating new instances, avoiding redundant model loading.
     """
     try:
         from medicare_rag.query.hybrid import get_hybrid_retriever
 
-        return get_hybrid_retriever(k=k, metadata_filter=metadata_filter)
+        return get_hybrid_retriever(
+            k=k, metadata_filter=metadata_filter, embeddings=embeddings, store=store
+        )
     except ImportError:
         pass
 
-    embeddings = get_embeddings()
-    store = get_or_create_chroma(embeddings)
+    if embeddings is None:
+        embeddings = get_embeddings()
+    if store is None:
+        store = get_or_create_chroma(embeddings)
     return LCDAwareRetriever(
         store=store,
         k=k,

@@ -372,19 +372,28 @@ class HybridRetriever(BaseRetriever):
 def get_hybrid_retriever(
     k: int = 8,
     metadata_filter: dict | None = None,
+    embeddings: Any = None,
+    store: Any = None,
 ) -> HybridRetriever:
     """Convenience constructor that wires up embeddings and Chroma store.
 
     Raises ImportError if rank-bm25 is not installed, so callers (e.g.
     get_retriever) can catch it and fall back to a non-hybrid retriever.
+
+    If embeddings and store are provided, they will be reused instead of
+    creating new instances, avoiding redundant model loading.
     """
     if not _HAS_BM25:
         raise ImportError("rank-bm25 is required for hybrid retrieval")
 
-    from medicare_rag.index import get_embeddings, get_or_create_chroma
+    if embeddings is None or store is None:
+        from medicare_rag.index import get_embeddings, get_or_create_chroma
 
-    embeddings = get_embeddings()
-    store = get_or_create_chroma(embeddings)
+        if embeddings is None:
+            embeddings = get_embeddings()
+        if store is None:
+            store = get_or_create_chroma(embeddings)
+
     return HybridRetriever(
         store=store,
         k=k,
