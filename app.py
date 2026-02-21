@@ -91,8 +91,10 @@ def _get_collection_meta(_store) -> dict[str, Any]:
 
     The ``_store`` parameter is the cached Chroma store handle obtained from
     ``_load_store()``. The leading underscore indicates that it is an internal
-    implementation detail (not user input) and is threaded through primarily so
-    that Streamlit's cache key includes the underlying store instance.
+    implementation detail (not user input). Streamlit excludes underscore-prefixed
+    parameters from the cache key hashing, so changes to the underlying store do
+    not directly invalidate this cache entry; instead, the short TTL controls how
+    frequently metadata is refreshed.
     """
     collection = get_raw_collection(_store)
     if collection.count() == 0:
@@ -486,7 +488,7 @@ def main() -> None:
                             _render_result_card(
                                 rank, doc, score, show_full_content
                             )
-            except (ValueError, RuntimeError) as e:
+            except Exception as e:
                 err_msg = str(e)
                 match = re.search(
                     r"dimension of (\d+), got (\d+)", err_msg, re.IGNORECASE
