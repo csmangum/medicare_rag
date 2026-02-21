@@ -61,7 +61,7 @@
       "\\bPT\\b.*rehab",
       "outpatient\\s*rehabilitation",
       "occupational\\s*therapy",
-      "speech.language\\s*pathology"
+      "speech[\\s-]*language\\s*pathology"
     ],
     "summary_prefix": "Physical Therapy: ",
     "min_pattern_matches": 1
@@ -100,7 +100,7 @@
       "hospice",
       "palliative\\s*care",
       "terminal\\s*illness",
-      "end.of.life"
+      "end[\\s-]*of[\\s-]*life"
     ],
     "summary_prefix": "Hospice: ",
     "min_pattern_matches": 1
@@ -111,7 +111,7 @@
     "patterns": [
       "dialysis",
       "\\bESRD\\b",
-      "end.stage\\s*renal",
+      "end[\\s-]*stage\\s*renal",
       "hemodialysis",
       "peritoneal\\s*dialysis"
     ],
